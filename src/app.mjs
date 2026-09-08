@@ -4,7 +4,8 @@ import {
   parseBackup, newEvent, newTheme, newRoute, newNode, sortedEvents, budgetUsage,
   descendants, removeEntity, progressFor, actionReadiness, demoState
 } from './domain.mjs';
-import { GUIDE_STEPS, createGuideState, prepareGuideStep } from './guide.mjs';
+import { GUIDE_STEPS, createGuideState, prepareGuideStep } from './guide.mjs?v=energy-2';
+import { reorderMonthlyEvents, installMonthOrdering } from './month-order.mjs';
 
 const $ = selector => document.querySelector(selector);
 const esc = value => String(value ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
@@ -33,6 +34,7 @@ const paths = {
   trash: '<path d="M3 6h18M9 6V3h6v3M5 6l1 15h12l1-15M10 10v7m4-7v7"/>',
   info: '<circle cx="12" cy="12" r="9"/><path d="M12 11v6M12 7v1"/>',
   spark: '<path d="m12 3 2 7 7 2-7 2-2 7-2-7-7-2 7-2z"/>',
+  grip: '<circle cx="8" cy="5" r="1"/><circle cx="16" cy="5" r="1"/><circle cx="8" cy="12" r="1"/><circle cx="16" cy="12" r="1"/><circle cx="8" cy="19" r="1"/><circle cx="16" cy="19" r="1"/>',
   screen: '<rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8m-4-4v4"/>'
 };
 const icon = (name, cls = '') => `<svg class="icon ${cls}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${paths[name] || paths.compass}</svg>`;
@@ -101,14 +103,14 @@ function showFormError(message) {
 }
 function titleOf(event) { return event.private && ui.hidePrivate ? '私密事件' : event.title; }
 function eventMeta(event) { return `${event.kind === 'background' ? '日常背景' : `${event.month} 月 · ${event.order}`} / ${ORIGINS[event.origin]}`; }
-function eventCard(event, editable = true, select = false) {
+function eventCard(event, editable = true, select = false, orderControls = '') {
   const hidden = event.private && ui.hidePrivate;
   const selected = ui.eventSelection.has(event.id);
-  return `<article class="event-card ${event.energy === null ? 'unrated' : event.energy >= 0 ? 'positive' : 'negative'} ${selected ? 'is-selected' : ''}">
+  return `<article ${orderControls ? `data-sort-id="${attr(event.id)}"` : ''} class="event-card ${event.energy === null ? 'unrated' : event.energy >= 0 ? 'positive' : 'negative'} ${selected ? 'is-selected' : ''}">
     <div class="card-top"><span class="eyebrow">${eventMeta(event)}</span><span class="energy ${event.energy === null ? '' : event.energy < 0 ? 'low' : ''}">${event.energy === null ? '未評分' : `${event.energy > 0 ? '+' : ''}${event.energy}`}</span></div>
     <h3>${event.private ? icon('lock') : ''}${esc(titleOf(event))}</h3>
     <p class="event-facts">${hidden ? '文字已遮蔽' : esc(event.facts || '')}</p>
-    <div class="card-bottom"><span class="micro">${hidden ? '私密卡' : event.feelings.map(esc).join(' · ') || (event.important ? '對我重要' : '')}</span>
+    <div class="card-bottom">${orderControls || (ui.step === 2 ? '<span></span>' : `<span class="micro">${hidden ? '私密卡' : event.feelings.map(esc).join(' · ') || (event.important ? '對我重要' : '')}</span>`)}
     ${select ? `<label class="select-card"><input type="checkbox" data-event-select="${event.id}" ${selected ? 'checked' : ''}><span>選取</span></label>` : editable ? button(`${icon('edit')}<span>${ui.step === 2 ? '評分' : '編輯'}</span>`, 'edit-event', 'text-button', `data-id="${event.id}" aria-label="編輯${attr(titleOf(event))}"`) : ''}</div>
   </article>`;
 }
@@ -193,22 +195,38 @@ function timelineSvg(exporting = false) {
     <text x="58" y="18" font-size="11" fill="#66756d">較充電 ↑</text><text x="58" y="393" font-size="10" fill="#66756d">較耗損 ↓　｜　事件間連線僅供回顧，不是連續測量</text>
   </svg>`;
 }
+function monthlyOrderControls(event, index, length) {
+  return `<div class="order-controls">
+    <button type="button" data-reorder-handle data-id="${attr(event.id)}" aria-label="拖曳排序：${attr(titleOf(event))}" aria-describedby="month-sort-help" title="拖曳排序" ${length < 2 ? 'disabled' : ''}>${icon('grip')}</button>
+    <button type="button" data-month-move="-1" data-id="${attr(event.id)}" aria-label="向前移動：${attr(titleOf(event))}" title="向前移動" ${index === 0 ? 'disabled' : ''}>${icon('back')}</button>
+    <button type="button" data-month-move="1" data-id="${attr(event.id)}" aria-label="向後移動：${attr(titleOf(event))}" title="向後移動" ${index === length - 1 ? 'disabled' : ''}>${icon('arrow')}</button>
+  </div>`;
+}
+function energyMonth(month) {
+  const events = sortedEvents(state.events).filter(e => e.month === month);
+  return `<section class="energy-month" aria-label="${month} 月事件">
+    <div class="energy-month-heading"><h2>${month} 月</h2><span class="month-count">${events.length} / 3</span>${events.length < 3 ? button(`${icon('plus')}新增`, 'add-event', 'text-button', `data-month="${month}" aria-label="在${month}月新增片刻"`) : ''}</div>
+    <div class="energy-month-cards" data-month-sort="${month}">${events.map((e, index) => eventCard(e, true, false, monthlyOrderControls(e, index, events.length))).join('') || empty('沒有事件', '這個月份可以留白。')}</div>
+  </section>`;
+}
 function energyView() {
-  const visible = state.events.filter(e => ui.view === 'list' ? (e.month === ui.month || e.kind === 'background') : true);
+  const months = ui.view === 'list' ? [ui.month] : [...new Set(sortedEvents(state.events).map(e => e.month))];
+  const background = state.events.filter(e => e.kind === 'background');
   const unrated = state.events.filter(e => e.energy === null).length;
-  return `${heading(STEPS[2][3], '看見起伏', '點卡片評分：−10 耗損，＋10 充電。', button(`${icon('plus')}新增片刻`, 'add-event', 'button quiet'))}
-    <section class="panel timeline-panel"><div class="panel-head"><div><h2>年度曲線</h2><span class="micro">${state.frame === 'then' ? '回想當時的感受' : '以現在回看的感受'} · ${unrated} 張還沒評分</span></div><div class="segmented" aria-label="圖板模式">${button('年度圖', 'view-graph', ui.view === 'graph' ? 'selected' : '', `aria-pressed="${ui.view === 'graph'}"`)}${button('逐月卡片', 'view-list', ui.view === 'list' ? 'selected' : '', `aria-pressed="${ui.view === 'list'}"`)}</div></div>
-    ${ui.view === 'graph' ? `<div class="timeline-scroll" tabindex="0" aria-label="年度能量圖，可左右捲動">${timelineSvg()}</div><div class="chart-legend"><span><i class="legend-dot"></i>計畫內／其他</span><span><i class="legend-diamond"></i>意外</span><span>點一下片刻，記錄感受</span>${button('調整評分視角', 'settings', 'text-button')}</div>` : `<div class="month-tabs" aria-label="選擇月份">${Array.from({ length: 12 }, (_, i) => button(`${i + 1}月`, 'month', ui.month === i + 1 ? 'selected' : '', `data-month="${i + 1}" aria-pressed="${ui.month === i + 1}"`)).join('')}</div>`}
+  return `${heading(STEPS[2][3], '看見起伏', '點「評分」設定能量：−10 耗損，＋10 充電。', button(`${icon('plus')}新增片刻`, 'add-event', 'button quiet'))}
+    <section class="panel timeline-panel"><div class="panel-head"><div><h2>${ui.view === 'graph' ? '年度曲線' : '月份'}</h2><span class="micro">${state.frame === 'then' ? '回想當時的能量' : '以現在回看的能量'} · ${unrated} 張還沒評分</span></div><div class="segmented" aria-label="圖板模式">${button('年度圖', 'view-graph', ui.view === 'graph' ? 'selected' : '', `aria-pressed="${ui.view === 'graph'}"`)}${button('逐月卡片', 'view-list', ui.view === 'list' ? 'selected' : '', `aria-pressed="${ui.view === 'list'}"`)}</div></div>
+    ${ui.view === 'graph' ? `<div class="timeline-scroll" tabindex="0" aria-label="年度能量圖，可左右捲動">${timelineSvg()}</div><div class="chart-legend"><span><i class="legend-dot"></i>計畫內／其他</span><span><i class="legend-diamond"></i>意外</span><span>點卡片評分</span>${button('調整評分視角', 'settings', 'text-button')}</div>` : `<div class="month-tabs" aria-label="選擇月份">${Array.from({ length: 12 }, (_, i) => button(`${i + 1}月`, 'month', ui.month === i + 1 ? 'selected' : '', `data-month="${i + 1}" aria-pressed="${ui.month === i + 1}"`)).join('')}</div>`}
     </section>
-    <div class="section-title"><h2>${ui.view === 'list' ? `${ui.month} 月的片刻與日常背景` : '事件卡'}</h2></div>
-    <div class="cards-grid">${visible.map(e => eventCard(e)).join('') || empty('這裡可以先留白', '不必為了畫出完整曲線而補上事件。', button('新增一個片刻', 'add-event', 'button quiet', `data-month="${ui.month}"`))}</div>
-    <section class="reflection-prompt"><div>${icon('eye')}<h2>觀察</h2><p>${esc(state.reflection.notice || '尚無觀察')}</p></div>${button('寫下觀察', 'reflection', 'button quiet')}</section>
-    ${chapterFooter(3, '找找其中的線索')}`;
+    <p class="order-instruction">拖曳卡片的六點圖示調整月內順序，也可使用箭頭。</p>
+    <span id="month-sort-help" class="sort-a11y">拖曳到同月份的位置。鍵盤方向鍵可移動，Home 移到最前，End 移到最後；Escape 取消拖曳。</span>
+    <div class="energy-board">${months.map(energyMonth).join('') || empty('還沒有事件卡', '新增事件後即可評分。', button('新增事件', 'add-event', 'button quiet', `data-month="${ui.month}"`))}</div>
+    ${background.length ? `<section class="energy-background"><h2>日常背景</h2><div class="cards-grid">${background.map(e => eventCard(e)).join('')}</div></section>` : ''}
+    ${chapterFooter(3, '發現線索')}`;
 }
 function themesView() {
   const unassigned = state.events.filter(e => !state.themes.some(t => t.eventIds.includes(e.id))).length;
-  return `${heading(STEPS[3][3], '發現線索', '把相關的卡片放在一起，為它們命名。', button(`${icon('plus')}建立主題`, 'add-theme', 'button primary'))}
-    <div class="theme-toolbar"><div class="segmented">${button('先選卡片，再命名', 'theme-cards', ui.themeMode === 'cards' ? 'selected' : '', `aria-pressed="${ui.themeMode === 'cards'}"`)}${button('先找詞語，再連結', 'theme-words', ui.themeMode === 'words' ? 'selected' : '', `aria-pressed="${ui.themeMode === 'words'}"`)}</div><span class="micro">${unassigned} 張未分類</span></div>
+  return `${heading(STEPS[3][3], '發現線索', ui.themeMode === 'cards' ? '勾選有共同情境、感受或需要的事件，按「用這些卡建立主題」命名。' : '點選詞語，在視窗勾選相關事件並儲存。', button(`${icon('plus')}建立主題`, 'add-theme', 'button primary'))}
+    <div class="theme-toolbar"><div class="segmented">${button('卡片分群', 'theme-cards', ui.themeMode === 'cards' ? 'selected' : '', `aria-pressed="${ui.themeMode === 'cards'}"`)}${button('詞語連結', 'theme-words', ui.themeMode === 'words' ? 'selected' : '', `aria-pressed="${ui.themeMode === 'words'}"`)}</div><span class="micro">${unassigned} 張未分類</span></div>
     ${ui.themeMode === 'words' ? `<div class="word-bank">${VALUES.map(word => button(esc(word), 'theme-word', 'word-chip', `data-word="${attr(word)}"`)).join('')}</div>` : ''}
     <div class="theme-workspace"><section><div class="section-title"><h2>事件卡</h2><span class="micro">已選 ${ui.eventSelection.size} 張</span></div>
       ${ui.eventSelection.size ? `<div class="selection-bar"><span>${ui.eventSelection.size} 張已選</span>${button('用這些卡建立主題', 'group-events', 'button small primary')}</div>` : ''}
@@ -434,7 +452,7 @@ function ratingSummary(e) {
   const facts = hidden ? '' : e.facts;
   return `<section class="rating-summary" aria-label="片刻摘要（唯讀）">
     <div class="rating-summary-top"><div class="rating-summary-copy"><div class="rating-meta"><span class="eyebrow">${e.kind === 'background' ? '日常背景' : `${e.month} 月`}</span><span class="chip origin-tag" aria-label="發生方式：${attr(ORIGINS[e.origin])}">${esc(ORIGINS[e.origin])}</span>${e.private ? chip(`${icon('lock')}私密卡`, 'privacy-tag') : ''}</div><h3 title="${attr(titleOf(e))}">${esc(titleOf(e))}</h3></div>
-    ${e.kind === 'event' ? `<div class="rating-order">${field('月內順序', 'order', e.order, { type: 'number', min: 1, max: 3, required: true, step: 1 })}</div>` : ''}</div>
+    </div>
     ${hidden ? '<p class="rating-private-note">文字已遮蔽；可回探索桌切換顯示。</p>' : facts ? `<details class="rating-facts"><summary><span>${esc(facts)}</span><small>查看事實</small></summary><p>${esc(facts)}</p></details>` : '<p class="rating-empty-facts"></p>'}
   </section>`;
 }
@@ -443,8 +461,9 @@ function eventDialog(entityId = '', month = ui.month, kind = 'event') {
   const e = old || newEvent(month, state.events, kind);
   // Only existing cards in the reflective chapter have read-only facts.
   // New cards still need the full editor, even when added from the energy view.
-  const ratingOnly = Boolean(old && ui.step === 2);
-  const facts = ratingOnly ? ratingSummary(e) : `<div class="form-grid">${field('月份', 'month', e.month, { type: 'number', min: 1, max: 12, required: true, step: 1 })}${field('月內順序', 'order', e.order, { type: 'number', min: 1, max: 3, required: true, step: 1, help: '同月的時間順序。' })}</div>
+  const scoring = ui.step === 2;
+  const ratingOnly = Boolean(old && scoring);
+  const facts = ratingOnly ? ratingSummary(e) : `<div class="form-grid">${field('月份', 'month', e.month, { type: 'number', min: 1, max: 12, required: true, step: 1 })}${scoring ? '' : field('月內順序', 'order', e.order, { type: 'number', min: 1, max: 3, required: true, step: 1, help: '同月的時間順序。' })}</div>
     ${field('事件名稱', 'title', e.title, { required: true, max: 120, placeholder: '例如：和老朋友一起吃了一頓晚餐' })}
     ${textarea('發生了什麼？', 'facts', e.facts, '可以留白。')}
     ${originTags(e.origin)}
@@ -454,16 +473,17 @@ function eventDialog(entityId = '', month = ui.month, kind = 'event') {
     <div class="energy-control"><span>−10<br><small>耗損</small></span><input id="event-energy" type="range" name="energy" min="-10" max="10" step="1" value="${e.energy ?? 0}" aria-label="事件能量" aria-describedby="energy-help"><span>+10<br><small>充電</small></span></div>
     <div class="energy-choices">${checkField('暫時不評分', 'unrated', e.energy === null)}${button('記為 0 分', 'zero-energy', 'text-button')}</div>
     <p id="energy-help" class="micro">移動滑桿即可評分；0 分與未評分不同。</p></div>
-    <fieldset class="choice-fieldset"><legend>感受（可多選）</legend><div class="check-chips">${FEELINGS.map(f => checkField(esc(f), 'feelings', e.feelings.includes(f), f)).join('')}</div></fieldset>
+    ${scoring ? '' : `<fieldset class="choice-fieldset"><legend>感受（可多選）</legend><div class="check-chips">${FEELINGS.map(f => checkField(esc(f), 'feelings', e.feelings.includes(f), f)).join('')}</div></fieldset>
     ${field('其他感受', 'customFeelings', e.feelings.filter(f => !FEELINGS.includes(f)).join('、'), { max: 400, help: '以「、」分隔；情緒詞總共最多 12 個。' })}
     ${selectField('我能怎麼回應', 'influence', e.influence, INFLUENCES, '意外不等於不可控；有計畫也不代表結果都要由自己負責。')}
-    ${checkField('這件事很重要', 'important', e.important)}</section>`;
+    ${checkField('這件事很重要', 'important', e.important)}`}</section>`;
   openDialog(ratingOnly ? '評分' : old ? '編輯事件' : kind === 'background' ? '新增日常' : '新增事件',
     ratingOnly ? '' : e.kind === 'background' ? '日常不占每月名額，也不連入曲線。' : '每月最多三張。',
     `${facts}${ui.step === 2 ? energy : `<details class="form-details"><summary>評分與感受（選填）</summary>${energy}</details>`}`, 'event', e.id,
     old && !ratingOnly ? button(`${icon('trash')}刪除`, 'delete-event', 'text-button danger', `data-id="${e.id}"`) : '', ratingOnly ? 'rating' : '');
   dialogContext.entity = e;
   dialogContext.ratingOnly = ratingOnly;
+  dialogContext.scoring = scoring;
   syncEnergyControl();
 }
 
@@ -543,11 +563,6 @@ function reviewDialog(nodeId, reviewId = '') {
   $('#editor input[name="date"]').max = dateString();
   if (n.startDate) $('#editor input[name="date"]').min = n.startDate;
   $('#editor input[name="amount"]').disabled = ['missed', 'reflection'].includes(r.mode);
-}
-function reflectionDialog() {
-  openDialog('記錄觀察', '',
-    textarea('我注意到什麼？', 'notice', state.reflection.notice) + textarea('什麼讓我意外？', 'surprise', state.reflection.surprise) +
-    textarea('想延續什麼？', 'keep', state.reflection.keep) + textarea('想放下或先不處理什麼？', 'release', state.reflection.release), 'reflection');
 }
 function settingsDialog() {
   openDialog('回顧設定', '',
@@ -645,9 +660,10 @@ function submitForm(form) {
       // A rating form deliberately omits fact inputs. Preserve the original
       // metadata rather than replacing absent fields with blanks/defaults.
       const facts = ctx.ratingOnly ? {} : { month: number(get('month')), title: get('title'), facts: get('facts'), origin: get('origin'), private: has('private') };
-      const e = { ...ctx.entity, ...facts, order: has('order') ? number(get('order')) : ctx.entity.order,
-        energy: has('unrated') ? null : number(get('energy')), influence: get('influence'), important: has('important'),
+      const feelings = ctx.scoring ? {} : { influence: get('influence'), important: has('important'),
         feelings: [...new Set([...all('feelings'), ...get('customFeelings').split(/[、,，]/).map(x => x.trim()).filter(Boolean)])] };
+      const e = { ...ctx.entity, ...facts, ...feelings, order: has('order') ? number(get('order')) : ctx.entity.order,
+        energy: has('unrated') ? null : number(get('energy')) };
       if (!e.title) throw new Error('請為這個片刻取一個名字，也可以只用代號。');
       success = commit(s => {
         const old = s.events.find(x => x.id === e.id);
@@ -692,7 +708,6 @@ function submitForm(form) {
       success = commit(s => { const i = s.reviews.findIndex(x => x.id === r.id); if (i < 0) s.reviews.push(r); else s.reviews[i] = r;
         if (r.decision === 'pause' || r.decision === 'stop') s.nodes.find(x => x.id === r.nodeId).status = r.decision === 'pause' ? 'paused' : 'stopped'; return s; }, '回顧已保存');
     }
-    if (ctx.type === 'reflection') success = commit(s => { for (const k of ['notice', 'surprise', 'keep', 'release']) s.reflection[k] = get(k); return s; }, '觀察已保存');
     if (ctx.type === 'budget') success = commit(s => { s.budget = { hours: number(get('hours')), money: number(get('money')), energy: number(get('energy')) }; return s; }, '資源預算已更新');
     if (ctx.type === 'settings') {
       const year = number(get('year')), frame = get('frame');
@@ -742,7 +757,6 @@ function handleAction(action, el) {
   if (action === 'zero-energy') { const slider = $('#editor input[name="energy"]'); if (slider) { slider.value = '0'; syncEnergyControl(true); } return; }
   if (action === 'view-graph' || action === 'view-list') { ui.view = action === 'view-graph' ? 'graph' : 'list'; render(); return; }
   if (action === 'month') { ui.month = number(el.dataset.month); render(); return; }
-  if (action === 'reflection') return reflectionDialog();
   if (action === 'theme-cards' || action === 'theme-words') { ui.themeMode = action === 'theme-cards' ? 'cards' : 'words'; render(); return; }
   if (action === 'add-theme') return themeDialog();
   if (action === 'theme-word') return themeDialog('', el.dataset.word);
@@ -789,6 +803,17 @@ function handleAction(action, el) {
     recovery = ''; ui.eventSelection.clear(); ui.actionSelection.clear(); ui.routeTheme = ''; if (commit(blankState(), '已開始新一輪')) go(0);
   });
 }
+installMonthOrdering({
+  announce: message => toast(message),
+  move(eventId, targetIndex, expectedIds) {
+    if (ui.step !== 2 || $('#editor').open) return false;
+    const event = state.events.find(e => e.id === eventId);
+    if (!event || event.kind !== 'event') return false;
+    const currentIds = sortedEvents(state.events).filter(e => e.month === event.month).map(e => e.id);
+    if (currentIds.join('|') !== expectedIds.join('|')) { toast('卡片已變更，請重新排序。'); return false; }
+    return commit(s => { s.events = reorderMonthlyEvents(s.events, eventId, targetIndex); return s; }, '月內順序已更新');
+  }
+});
 document.addEventListener('click', event => {
   const el = event.target.closest('[data-action]'); if (!el || el.disabled) return;
   event.preventDefault(); handleAction(el.dataset.action, el);

@@ -84,10 +84,10 @@ def run():
         other_id = stored(page)['events'][1]['id']
         step(page, 2)
         edit(page, event_id)
-        check('rating facts are static; only order remains an input',
+        check('rating facts are static with no order input',
               page.locator('.rating-summary').count() == 1 and
               page.locator('#editor [name="month"], #editor [name="title"], #editor [name="facts"], #editor [name="origin"], #editor [name="private"]').count() == 0 and
-              page.locator('.rating-summary input[name="order"]').count() == 1)
+              page.locator('#editor input[name="order"]').count() == 0)
         check('rating shows the selected origin as a read-only tag',
               page.locator('.rating-summary .origin-tag').inner_text() == '意外')
         check('unrated slider is immediately usable without clearing a checkbox',
@@ -101,13 +101,13 @@ def run():
         check('slider immediately updates the signed score and rated state',
               energy(page) == '+7' and not page.locator('[name="unrated"]').is_checked() and
               '+7 分' in page.locator('#event-energy').get_attribute('aria-valuetext'))
-        page.locator('[name="order"]').fill('2')
         save(page)
+        page.locator(f'[data-id="{event_id}"][data-month-move="1"]').click()
         saved = next(e for e in stored(page)['events'] if e['id'] == event_id)
         check('rating save preserves all fact metadata',
               all(saved[key] == first[key] for key in ('id', 'kind', 'month', 'title', 'facts', 'origin', 'private')) and
               saved['energy'] == 7)
-        check('reordering swaps occupied monthly positions without losing a card',
+        check('page controls reorder within the month without losing a card',
               saved['order'] == 2 and
               next(e for e in stored(page)['events'] if e['id'] == other_id)['order'] == 1)
         edit(page, event_id)
