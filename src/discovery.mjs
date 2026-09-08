@@ -1,3 +1,4 @@
+import { createCanvas } from './canvas.mjs?v=canvas-4';
 import { discoveryCounts, discoveryCreate, discoveryClassify, discoveryMove, discoveryRename } from './discovery-model.mjs?v=discovery-3';
 
 /** Two independent sorting workspaces. All data writes use the app transaction. */
@@ -5,8 +6,8 @@ export function createDiscovery(api) {
   const { esc, icon, button: b, getState: state, render: paint, commit: save, toast } = api;
   const $d = selector => document.querySelector(selector);
   let view = fresh();
-  let undo = null, drag = null, frame = 0;
-  function fresh(mode = 'binary') { return { mode, binaryId: '', inspectId: '', newWord: false, selected: new Set(), drafts: {}, renaming: '', allCards: false, message: '' }; }
+  let undo = null, redo = null, drag = null, frame = 0;
+  function fresh(mode = 'binary') { return { mode, binaryId: '', inspectId: '', newWord: false, selected: new Set(), drafts: {}, renaming: '', allCards: false, message: '', surface: null, journeyMap: false, directionEditing: '' }; }
   const themes = () => state().themes;
   const groupThemes = () => themes().filter(t => t.method !== 'binary');
   function activeWord() {
@@ -28,8 +29,10 @@ export function createDiscovery(api) {
     let result;
     const ok = save(s => { result = fn(s); return s; });
     if (ok) {
+      redo = null;
       undo = { before, after: JSON.stringify(themes()), owner, revision: state().revision };
       view.message = message;
+      canvas.contentChanged();
       api.practiced?.();
       after?.(result);
       paint();
@@ -39,9 +42,16 @@ export function createDiscovery(api) {
   function canUndo() { return undo && undo.owner === state().id && undo.revision === state().revision && undo.after === JSON.stringify(themes()); }
   function undoLast() {
     if (!canUndo()) return toast('資料已變更，無法復原這一步');
-    const previous = undo.before;
+    const previous = undo.before, future = structuredClone(themes()), owner = state().id;
     const ok = save(s => { s.themes = structuredClone(previous); return s; });
-    if (ok) { undo = null; view.inspectId = ''; view.message = '已復原分類'; paint(); focus('#discovery-message'); }
+    if (ok) { redo = { future, owner, revision: state().revision, after: JSON.stringify(themes()) }; undo = null; view.inspectId = ''; view.message = '已復原分類'; paint(); focus('#discovery-message'); }
+  }
+  function canRedo() { return redo && redo.owner === state().id && redo.revision === state().revision && redo.after === JSON.stringify(themes()); }
+  function redoLast() {
+    if (!canRedo()) return;
+    const before = structuredClone(themes()), future = redo.future, owner = state().id;
+    const ok = save(s => { s.themes = structuredClone(future); return s; });
+    if (ok) { undo = { before, after: JSON.stringify(themes()), owner, revision: state().revision }; redo = null; view.message = '已重做分類'; paint(); }
   }
   function example() {
     return view.mode === 'binary'
@@ -84,6 +94,7 @@ export function createDiscovery(api) {
       return `<section class="discovery-bin ${kind}" data-discovery-drop="${kind}" aria-label="${label}"><header><h2>${label}</h2><span>${items.length}</span></header><div class="discovery-bin-cards">${items.map(e => card(e, kind, true)).join('') || `<p class="discovery-drop-hint">拖曳卡片到這裡</p>`}</div></section>`;
     }
     const currentAnswer = current ? t.eventIds.includes(current.id) ? 'related' : t.unrelatedEventIds.includes(current.id) ? 'unrelated' : 'pending' : '';
+    if (useCanvas()) return `${coach('拖曳事件到「有關」或「無關」。選取卡片也能使用「移動」。', 2)}${chooser}<p class="micro">有關 ${counts.related.length} · 無關 ${counts.unrelated.length} · 未判斷 ${counts.pending.length}</p>${canvas.render({kind:'binary', themeId:t.id})}${counts.total ? outcome(t) : ''}`;
     return `${coach(instruction, !counts.total ? 1 : counts.pending.length ? 2 : 3)}${chooser}
       <div class="discovery-word-heading"><div>${view.renaming === t.id ? nameEditor(t) : b('改詞', 'd-rename', 'text-button', extra('id', t.id))}<p>有關 ${counts.related.length} · 無關 ${counts.unrelated.length} · 未判斷 ${counts.pending.length}</p></div>${b(icon('trash'), 'd-delete', 'icon-button danger', `${extra('id', t.id)} aria-label="刪除詞語${esc(t.label)}"`)}</div>
       <div class="discovery-binary-board">${bin('related', '有關', counts.related)}<section class="discovery-focus" data-discovery-drop="pending" aria-label="目前事件"><div class="discovery-focus-top"><span>${currentAnswer === 'pending' ? `未判斷 ${counts.pending.length} 張` : current ? `目前：${currentAnswer === 'related' ? '有關' : '無關'}` : '分類結果'}</span>${canUndo() ? b('復原', 'd-undo', 'text-button') : ''}</div>
@@ -93,17 +104,18 @@ export function createDiscovery(api) {
       </section>${bin('unrelated', '無關', counts.unrelated)}</div>${counts.total ? outcome(t) : ''}`;
   }
   function groupView() {
+    if (useCanvas()) return groupCanvas();
     const groups = groupThemes();
     const ungrouped = state().events.filter(e => !groups.some(t => t.eventIds.includes(e.id)));
     let pool = view.allCards ? state().events : ungrouped;
     if (api.training() && !groups.length) pool = pool.toSorted((a,b) => Number(['demo-event-5','demo-event-10'].includes(b.id)) - Number(['demo-event-5','demo-event-10'].includes(a.id)));
     const unnamed = groups.find(t => !t.label.trim() && t.eventIds.length);
     const named = groups.filter(t => t.label.trim());
-    const instruction = !state().events.length ? '新增事件，或用示範卡練習分群。' : unnamed ? '這群事件有什麼共同點？輸入群組名稱，按「儲存名稱」。' : !groups.length ? (api.training() ? '勾選「旅行」與「把週末還給自己」，按「建立群組」。它們的共同點可以叫什麼？' : '勾選有共同點的事件，按「建立群組」。也可拖曳卡片到新增群組區。') : '把相關事件放在同一群，為共同點命名。拖曳可換群，點「移動」也可以。';
-    return `${coach(instruction, unnamed ? 3 : groups.length ? 2 : 1)}
+    const instruction = !state().events.length ? '新增事件，或用示範卡練習分群。' : unnamed ? '這群事件有什麼共同點？輸入群組名稱，按「儲存名稱」。' : !groups.length ? (api.training() ? '勾選「旅行」與「把週末還給自己」，按「建立群組」。它們的共同點可以叫什麼？' : '勾選有共同點的事件，按「建立群組」命名。') : '選取有共同點的事件成群；「移動」可換群。';
+    return `${coach(instruction, unnamed || groups.length ? 3 : 1)}
       <div class="discovery-group-toolbar"><span>${ungrouped.length} 張未分群 · ${groups.length} 群</span>${b(`${icon('plus')}新增群組`, 'd-new-group', 'button quiet')}</div>
       <div class="discovery-group-board"><section class="discovery-pool" data-discovery-drop="pool" aria-label="事件卡"><header><h2>${view.allCards ? '全部事件' : '未分群'}</h2>${b(view.allCards ? '顯示未分群' : '顯示全部', 'd-all-cards', 'text-button', `aria-pressed="${view.allCards}"`)}</header><div class="discovery-selection"><span>已選 ${view.selected.size} 張</span>${b('建立群組', 'd-group-selected', 'button primary small', view.selected.size ? '' : 'disabled')}</div><div class="discovery-pool-cards">${pool.map(e => card(e, '', true)).join('') || `<p class="discovery-drop-hint">${state().events.length ? '所有事件已入群；可顯示全部，讓同一事件加入另一群。' : '還沒有事件。'}</p>`}</div></section>
-        ${groups.map(t => `<section class="discovery-group ${!t.label.trim() ? 'needs-name' : ''}" data-discovery-drop="${esc(t.id)}" aria-label="${esc(themeName(t))}"><header>${!t.label.trim() || view.renaming === t.id ? nameEditor(t) : `<h2>${esc(t.label)}${b('改名', 'd-rename', 'text-button', extra('id', t.id))}</h2>`}${b(icon('trash'), 'd-delete', 'icon-button danger', `${extra('id', t.id)} aria-label="刪除群組${esc(themeName(t))}"`)}</header><div class="discovery-group-cards">${t.eventIds.map(id => state().events.find(e => e.id === id)).filter(Boolean).map(e => card(e, t.id, true)).join('') || '<p class="discovery-drop-hint">將事件拖到這一群</p>'}</div>${t.label.trim() ? `<footer><span>${t.eventIds.length} 張</span>${b('比較做法 →', 'd-options', 'text-button', extra('id', t.id))}</footer>` : ''}</section>`).join('')}
+        ${groups.map(t => `<section class="discovery-group ${!t.label.trim() ? 'needs-name' : ''}" data-discovery-drop="${esc(t.id)}" aria-label="${esc(themeName(t))}"><header>${!t.label.trim() || view.renaming === t.id ? nameEditor(t) : `<h2>${esc(t.label)}${b('改名', 'd-rename', 'text-button', extra('id', t.id))}</h2>`}${t.label.trim() ? b('比較做法 →', 'd-options', 'text-button discovery-group-next', extra('id', t.id)) : ''}${b(icon('trash'), 'd-delete', 'icon-button danger', `${extra('id', t.id)} aria-label="刪除群組${esc(themeName(t))}"`)}</header><div class="discovery-group-cards">${t.eventIds.map(id => state().events.find(e => e.id === id)).filter(Boolean).map(e => card(e, t.id, true)).join('') || '<p class="discovery-drop-hint">將事件拖到這一群</p>'}</div>${t.label.trim() ? `<footer><span>${t.eventIds.length} 張</span></footer>` : ''}</section>`).join('')}
         <button type="button" data-action="d-new-group" class="discovery-new-group" data-discovery-drop="new">${icon('plus')}<span>拖曳卡片建立群組</span><small>也可點此新增</small></button></div>
         ${!state().events.length ? b('新增事件', 'go', 'button primary', 'data-step="1"') : ''}
         ${named.length ? '<p class="discovery-footnote">每個詞都可以帶到下一步，不需要把所有事件分完。</p>' : ''}`;
@@ -112,7 +124,7 @@ export function createDiscovery(api) {
     // A deleted event cannot remain selected after returning from another chapter.
     view.selected = new Set([...view.selected].filter(id => state().events.some(e => e.id === id)));
     return `<section id="discovery" class="discovery"><div class="page-heading"><h1 id="page-title" tabindex="-1">發現線索</h1>${!api.training() ? b('操作示範', 'd-practice', 'button quiet') : ''}</div>
-      <div class="discovery-methods" aria-label="分類方法">${b('二分類', 'd-mode', view.mode === 'binary' ? 'selected' : '', 'data-mode="binary" aria-pressed="' + (view.mode === 'binary') + '"')}${b('分群', 'd-mode', view.mode === 'group' ? 'selected' : '', 'data-mode="group" aria-pressed="' + (view.mode === 'group') + '"')}</div>
+      <div class="discovery-mode-row"><div class="discovery-methods" aria-label="分類方法">${b('二分類', 'd-mode', view.mode === 'binary' ? 'selected' : '', 'data-mode="binary" aria-pressed="' + (view.mode === 'binary') + '"')}${b('分群', 'd-mode', view.mode === 'group' ? 'selected' : '', 'data-mode="group" aria-pressed="' + (view.mode === 'group') + '"')}</div>${surfaceSwitch()}</div>
       <p id="discovery-drag-help" class="sort-a11y">拖曳六點圖示移動卡片，Escape 取消。鍵盤或觸控可點「移動」選擇目的地；二分類也可用有關與無關按鈕。</p>
       ${view.mode === 'binary' ? binaryView() : groupView()}
       <div class="discovery-feedback"><p id="discovery-message" role="status" tabindex="-1">${esc(view.message)}</p>${canUndo() ? b('復原上一步', 'd-undo', 'text-button') : ''}</div>
@@ -141,7 +153,9 @@ export function createDiscovery(api) {
   }
   function action(action, el) {
     const id = el.dataset.id || '';
-    if (action === 'd-mode') { view.mode = el.dataset.mode; view.message = ''; paint(); focus(`[data-action="d-mode"][data-mode="${view.mode}"]`); }
+    if (action === 'd-surface') { view.surface = el.dataset.surface; canvas.cancel(); paint(); focus(`[data-action="d-surface"][data-surface="${view.surface}"]`); }
+    if (action === 'd-map') { view.journeyMap = !view.journeyMap; paint(); }
+    if (action === 'd-mode') { view.mode = el.dataset.mode; view.surface = null; view.message = ''; paint(); focus(`[data-action="d-mode"][data-mode="${view.mode}"]`); }
     if (action === 'd-word') createWord(el.dataset.word);
     if (action === 'd-new-word') { view.newWord = true; paint(); focus('#discovery-word'); }
     if (action === 'd-cancel-word') { view.newWord = false; paint(); }
@@ -155,16 +169,56 @@ export function createDiscovery(api) {
     if (action === 'd-rename') { view.renaming = id; paint(); focus(`[id="discovery-name-${id}"]`, true); }
     if (action === 'd-delete') api.deleteTheme(id);
     if (action === 'd-undo') undoLast();
-    if (action === 'd-options') api.options(id);
+    if (action === 'd-options') goOptions(id);
+    if (action === 'd-direction-edit') { view.directionEditing = id; paint(); focus('#discovery-direction-input', true); }
     if (action === 'd-practice') api.practice(view.mode);
     if (action === 'd-move-menu') moveMenu(id, el.dataset.source || '');
     if (action === 'd-move-to') { const copy = !!$d('#discovery-copy')?.checked; api.closeDialog(); if (view.mode === 'binary') classify(id, el.dataset.target); else move([id], el.dataset.source || '', el.dataset.target, copy); }
   }
+  function goOptions(id) { view.journeyMap = useCanvas() && window.innerWidth >= 1100; api.options(id); }
+  function useCanvas() { return view.surface ? view.surface === 'canvas' : view.mode === 'group' && window.innerWidth >= 1100; }
+  function surfaceSwitch() { return `<div class="discovery-view-switch" aria-label="操作方式">${b(view.mode === 'binary' ? '逐張' : '清單', 'd-surface', '', `data-surface="task" aria-pressed="${!useCanvas()}"`)}${b('畫布', 'd-surface', '', `data-surface="canvas" aria-pressed="${useCanvas()}"`)}</div>`; }
+  function groupCanvas() {
+    const groups = groupThemes(), pending = state().events.filter(e => !groups.some(t => t.eventIds.includes(e.id)));
+    const unnamed = groups.find(t => !t.label.trim());
+    const editing = groups.find(t => t.id === view.renaming) || unnamed;
+    const instruction = !state().events.length ? '新增事件，或按「操作示範」練習。' : editing ? '這群事件的共同點是什麼？輸入名稱。' : !groups.length ? (api.training() ? '選取「旅行」與「把週末還給自己」，按「成群」，為共同點命名。' : '選取有共同點的事件，按「成群」，為共同點命名。') : '拖曳卡片整理群組；點群組上的「比較做法」選擇接下來的方向。';
+    return `${coach(instruction, editing || groups.length ? 3 : 1)}<div class="discovery-group-toolbar"><span>${pending.length} 張未分群 · ${groups.length} 群</span>${b('新增群組', 'd-new-group', 'text-button')}</div>${editing ? `<div class="canvas-inspector">${nameEditor(editing)}</div>` : ''}${canvas.render({kind:'group'})}${!state().events.length ? b('新增事件','go','button primary','data-step="1"') : ''}`;
+  }
+  function moveMany(cards, target, copying = false) {
+    const refs = cards.filter(c => state().events.some(e => e.id === c.event.id));
+    if (!refs.length) return;
+    let made = '';
+    const ok = transact(s => {
+      const destination = target === 'new' ? (made = discoveryCreate(s, 'group').id) : target;
+      for (const ref of refs) discoveryMove(s, [ref.event.id], copying ? '' : ref.source, destination, copying);
+      return destination;
+    }, target === 'new' ? '群組已建立。請命名。' : '卡片已移動。', () => { if (made) view.renaming = made; });
+    if (ok && made) { focus(`[id="discovery-name-${made}"]`, true); }
+  }
+  function actionDirection(id) { view.directionEditing = id; paint(); focus('#discovery-direction-input', true); }
+  const canvas = createCanvas({
+    ...api, options: goOptions, group: cards => moveMany(cards, 'new', true), moveMany,
+    classifyMany: (cards, answer) => { const word = activeWord(); if (word) transact(s => { for (const card of cards) discoveryClassify(s, word.id, card.event.id, answer); }, '分類已更新。'); },
+    newGroup: () => action('d-new-group', {dataset:{}}),
+    rename: id => action('d-rename', {dataset:{id}}),
+    canUndo, undo: undoLast, canRedo, redo: redoLast, moveMenu,
+    inspect: (e, source) => api.openDialog('事件內容', esc(title(e)), `<p>${esc(fact(e) || '沒有補充內容')}</p>${b('移動', 'd-move-menu', 'button quiet', `data-id="${esc(e.id)}" data-source="${esc(source)}"`)}`),
+    openNode: (action, id) => {
+      if (action === 'direction') return actionDirection(id);
+      const target = document.querySelector(`[data-action="${action}"][data-id="${id}"]`);
+      if (target) target.click();
+    },
+    help: () => api.openDialog('畫布操作', '', `<div class="canvas-guide-help"><p>選取事件後按「成群」，輸入共同點。拖曳卡片到其他群組可換群；拖曳群組標題的六點圖示只改版面。</p><p>使用「平移」移動畫面，或用滑鼠滾輪。按「總覽」找回全部卡片，「定位」回到指定群組。</p><p>鍵盤：Tab 選控制項；事件卡按空白鍵選取。+／− 縮放，0 原始大小，F 總覽。移動可使用卡片按鈕，不必拖曳。</p><p>手機可切換「清單／逐張」。画布內雙指縮放；回到清單不會改變分類。</p><p>版面保存在此瀏覽器。JSON 備份保留事件與分類，不包含版面位置；匯入後會重新排列。</p></div>`)
+  });
+
   function options(id = '') {
     const named = themes().filter(t => t.label.trim());
     const t = themes().find(t => t.id === id);
     if (!t) return `<section class="discovery-direction"><h2>哪個詞要帶到接下來的生活？</h2><p>選擇一個詞，寫下想保留或改變的事。</p><div class="discovery-direction-choices">${named.map(t => b(`${esc(t.label)}<span class="micro">${t.method === 'binary' ? '二分類' : '分群'} · ${t.eventIds.length} 張</span>`, 'd-options', 'button quiet', extra('id', t.id))).join('') || b('回到分類', 'go', 'button quiet', 'data-step="3"')}</div></section>`;
-    return `<section class="discovery-direction"><div class="discovery-direction-top"><span>來自「${esc(themeName(t))}」</span>${b('換詞', 'd-options', 'text-button', 'data-id=""')}</div><form data-discovery-form="direction" data-id="${esc(t.id)}"><label for="discovery-direction-input">接下來想保留或改變什麼？</label><textarea id="discovery-direction-input" name="intention" rows="2" maxlength="500" required placeholder="例如：減少工作打斷私人時間">${esc(editableDraft('direction-' + t.id, t.intention))}</textarea><div><button class="button primary" type="submit">確認方向</button>${t.intention ? b('新增做法', 'add-route', 'button quiet') : ''}</div></form>${state().routes.some(r => r.themeId === t.id) || state().nodes.some(n => n.themeIds.includes(t.id)) ? '<p class="micro">修改方向不會改寫既有路線或行動。</p>' : '<p class="micro">詞語描述過去；方向由你選擇，不由事件數量決定。</p>'}</section>`;
+    const map = `<div class="journey-map-switch"><span>方向 → 做法 → 行動</span>${b(view.journeyMap ? '顯示清單' : '路線圖', 'd-map', 'button quiet', `aria-pressed="${view.journeyMap}"`)}</div>${view.journeyMap ? `<div class="journey-canvas">${canvas.render({kind:'journey', themeId:id})}</div>` : ''}`;
+    if (t.intention && view.directionEditing !== t.id) return `<section class="discovery-direction confirmed-direction"><div class="discovery-direction-top"><span>來自「${esc(themeName(t))}」</span>${b('換詞', 'd-options', 'text-button', 'data-id=""')}</div><h2>${esc(t.intention)}</h2><div class="inline">${b('調整方向', 'd-direction-edit', 'button quiet', extra('id', t.id))}${b('新增做法', 'add-route', 'button primary')}</div></section>${map}`;
+    return `<section class="discovery-direction"><div class="discovery-direction-top"><span>來自「${esc(themeName(t))}」</span>${b('換詞', 'd-options', 'text-button', 'data-id=""')}</div><form data-discovery-form="direction" data-id="${esc(t.id)}"><label for="discovery-direction-input">接下來想保留或改變什麼？</label><textarea id="discovery-direction-input" name="intention" rows="2" maxlength="500" required placeholder="例如：減少工作打斷私人時間">${esc(editableDraft('direction-' + t.id, t.intention))}</textarea><div><button class="button primary" type="submit">確認方向</button>${t.intention ? b('新增做法', 'add-route', 'button quiet') : ''}</div></form>${state().routes.some(r => r.themeId === t.id) || state().nodes.some(n => n.themeIds.includes(t.id)) ? '<p class="micro">修改方向不會改寫既有路線或行動。</p>' : '<p class="micro">詞語描述過去；方向由你選擇，不由事件數量決定。</p>'}</section>${map}`;
   }
   document.addEventListener('submit', e => {
     const form = e.target.closest('[data-discovery-form]'); if (!form) return;
@@ -179,7 +233,7 @@ export function createDiscovery(api) {
       const intention = String(data.get('intention') || '').trim();
       if (!intention) return toast('請寫下接下來的方向');
       const ok = save(s => { const t = s.themes.find(t => t.id === id); if (!t) throw new Error('詞語已刪除'); t.intention = intention; return s; }, '方向已確認；比較不同做法。');
-      if (ok) { delete view.drafts['direction-' + id]; paint(); focus('.discovery-direction [data-action="add-route"]'); }
+      if (ok) { delete view.drafts['direction-' + id]; view.directionEditing = ''; paint(); focus('.discovery-direction [data-action="add-route"]'); }
     }
   });
   document.addEventListener('input', e => {
@@ -254,9 +308,9 @@ export function createDiscovery(api) {
   window.addEventListener('blur', cancelDrag);
   return {
     render, action, options,
-    reset(mode = 'binary') { cancelDrag(); view = fresh(mode); undo = null; },
-    snapshot() { return { view: structuredClone(view), undo: structuredClone(undo) }; },
-    restore(saved) { cancelDrag(); view = saved ? saved.view : fresh(); undo = saved?.undo || null; },
+    reset(mode = 'binary') { cancelDrag(); view = fresh(mode); undo = null; redo = null; canvas.reset(); },
+    snapshot() { return { view: structuredClone(view), undo: structuredClone(undo), redo: structuredClone(redo), canvas: canvas.snapshot() }; },
+    restore(saved) { cancelDrag(); view = saved ? saved.view : fresh(); undo = saved?.undo || null; redo = saved?.redo || null; canvas.restore(saved?.canvas); },
     hasDrafts() { return Object.keys(view.drafts).length > 0; }
   };
 }

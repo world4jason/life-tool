@@ -43,6 +43,8 @@ def run():
     # Bottom-up grouping uses the board; direction is a separate next-step choice.
     step(p,3)
     p.locator('[data-action="d-mode"][data-mode="group"]').click()
+    # List accessibility regression; desktop canvas is tested in canvas.py.
+    p.locator('[data-action="d-surface"][data-surface="task"]').click()
     for e in stored(p)['events'][:2]: p.locator(f'[data-discovery-select="{e["id"]}"]').check()
     action(p,'d-group-selected')
     p.locator('[data-discovery-form="name"] input').fill('我需要連結')

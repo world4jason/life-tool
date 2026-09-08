@@ -70,6 +70,8 @@ def run():
     check('rename does not rewrite downstream work',state(p)['routes']==old['routes'] and state(p)['nodes']==old['nodes'])
     # Group mode must not treat binary memberships as group assignments.
     p.locator('[data-action="d-mode"][data-mode="group"]').click()
+    # List accessibility regression; desktop canvas is tested in canvas.py.
+    p.locator('[data-action="d-surface"][data-surface="task"]').click()
     check('binary answers are isolated from grouping',p.locator('.discovery-group').count()==len(old['themes']) and p.locator('.discovery-binary-board').count()==0)
     remaining=p.locator('[data-discovery-select]');ids=[remaining.nth(i).get_attribute('data-discovery-select') for i in range(2)]
     for id in ids:p.locator(f'[data-discovery-select="{id}"]').check()
@@ -107,7 +109,7 @@ def run():
     check('classification and groups survive serialized reload',state(q)['themes']==state(p)['themes'])
     # Contextual practice starts here, not at the first chapter, and restores data.
     click(q,'d-practice');check('contextual demo begins in discovery',q.locator('.step.active').get_attribute('data-step')=='3')
-    q.locator('.discovery-answer-buttons [data-answer="related"]').click();q.locator('[data-action="d-mode"][data-mode="group"]').click()
+    q.locator('.discovery-answer-buttons [data-answer="related"]').click();q.locator('[data-action="d-mode"][data-mode="group"]').click();q.locator('[data-action="d-surface"][data-surface="task"]').click()
     check('group tutorial gives concrete example cards',q.locator('.discovery-suggested').count()==2 and '旅行' in q.locator('.discovery-instruction').inner_text())
     click(q,'guide-exit');check('exiting tutorial restores exact personal bytes',q.evaluate('(k)=>localStorage.getItem(k)',KEY)==stored_bytes)
     # Native touch input events are emulated; this is not physical iOS validation.

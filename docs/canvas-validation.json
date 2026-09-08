@@ -1,0 +1,65 @@
+{
+  "version": "0.4.0",
+  "base_commit": "31c438c869b96a4a9b07ad446313e5f05190df63",
+  "engine": "native DOM/SVG, not React Flow",
+  "scope": "guided grouping and binary canvas; direction/route/action relationship map",
+  "unit_tests": 104,
+  "build_bytes": 279943,
+  "build_sha256": "76dc7580d3632536eca8d7c8396e0e086107ebf022656d92439884f849dbe7f0",
+  "page_viewport_pairs": 35,
+  "guide_viewport_pairs": 30,
+  "review": "simulated role walkthrough by the implementer, not independent user testing",
+  "environment": {
+    "browser": "Chromium",
+    "storage": "deterministic shim",
+    "load": "exact standalone HTML via set_content",
+    "network": "No runtime CDN or external resources",
+    "http_attempt": "ERR_BLOCKED_BY_ADMINISTRATOR; not bypassed",
+    "touch": "Chromium CDP emulation, not physical hardware"
+  },
+  "unverified": [
+    "Native HTTP/GitHub Pages persistence",
+    "Physical Safari/iPhone/Android",
+    "Screen reader and Chinese IME",
+    "Human usability outcomes"
+  ],
+  "data": "v2 domain schema unchanged; canvas positions separate and not in JSON backup",
+  "react_flow_trial": {
+    "run": 34266524955,
+    "conclusion": "failure",
+    "job_steps": null,
+    "deployed": false
+  },
+  "browser_checks": 233,
+  "suites": {
+    "canvas": {
+      "passed": 45,
+      "script": "tests/canvas.py"
+    },
+    "canvas-journey": {
+      "passed": 19,
+      "script": "tests/canvas-journey.py"
+    },
+    "discovery": {
+      "passed": 38,
+      "script": "tests/discovery.py"
+    },
+    "ui": {
+      "passed": 27,
+      "script": "tests/flows.py"
+    },
+    "guide": {
+      "passed": 22,
+      "script": "tests/guide.py"
+    },
+    "rating": {
+      "passed": 42,
+      "script": "tests/rating.py"
+    },
+    "energy-board": {
+      "passed": 40,
+      "script": "tests/energy-board.py"
+    }
+  },
+  "details": "Run the scripts to regenerate individual checks in test-results/*.json; the delivery includes life-atlas-canvas-tests.json."
+}

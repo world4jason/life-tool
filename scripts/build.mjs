@@ -1,12 +1,12 @@
 import { readFile, mkdir, writeFile } from 'node:fs/promises';
-let html = await readFile('index.html', 'utf8');
+let html = (await readFile('index.html', 'utf8')).replace(/<script type="importmap">[\s\S]*?<\/script>/g, '');
 for (const match of [...html.matchAll(/<link rel="stylesheet" href="(\.\/src\/[^"?]+)(?:\?[^\"]*)?">/g)]) {
   const css = await readFile(match[1], 'utf8');
   html = html.replace(match[0], () => `<style>${css}</style>`);
 }
 // Each source module retains its own scope. Export destructuring replaces only
 // static local imports; the offline build makes no network requests.
-const modules = ['domain', 'month-order', 'guide', 'discovery-model', 'discovery', 'app'];
+const modules = ['domain', 'month-order', 'guide', 'discovery-model', 'canvas-model', 'canvas', 'discovery', 'app'];
 let bundle = '';
 for (const name of modules) {
   const code = await readFile(`src/${name}.mjs`, 'utf8');
