@@ -33,7 +33,7 @@ def run():
         page=mount(browser)
         page.on('pageerror',lambda e:errors.append(str(e)))
         page.screenshot(path=str(OUT/'desktop-home.png'),full_page=True)
-        page.get_by_role('button',name='先玩一輪示範').click()
+        page.get_by_role('button',name='跟著示範做').click()
         page.locator('.steps [data-step="2"]').click()
         page.screenshot(path=str(OUT/'desktop-timeline.png'),full_page=True)
         for width in (1440,1024,768,390,320):

@@ -1,0 +1,50 @@
+/* Guided practice and concise UI. All controls remain native and keyboardable. */
+.sidebar .steps { margin-top: 36px; }
+.sidebar .local-note { margin-top: auto; }
+.sidebar .step { min-height: 62px; }
+.page-heading { margin-bottom: 24px; }
+.page-heading h1 { font-size: clamp(1.7rem, 3vw, 2.25rem); }
+.page-heading p { margin-top: 8px; }
+.hero-copy > p { max-width: 26em; }
+.journey-card { min-height: 134px; gap: 12px; }
+.journey-card > span:last-child { font-size: 16px; font-weight: 600; }
+.chapter-footer { justify-content: flex-end; }
+.possibility-card p { margin: 0; color: var(--ink); font-size: 18px; line-height: 1.65; }
+.dialog-heading h2 { margin-top: 0; }
+.guide-bar { border: 1px solid #a0b7aa; border-radius: 16px; padding: 22px 26px; margin-bottom: 26px; background: #eaf0e7; scroll-margin-top: 20px; }
+.guide-progress { display: flex; align-items: center; justify-content: space-between; gap: 16px; color: #325c4b; font-size: 14px; }
+.guide-progress > div { display: flex; align-items: center; gap: 0; }
+.guide-dot { position: relative; border: 0; background: none; padding: 0; width: 32px; height: 32px; border-radius: 50%; cursor: pointer; }
+.guide-dot::after { content: ''; display: block; width: 8px; height: 8px; margin: auto; border-radius: 50%; background: #a7b9ac; }
+.guide-dot.current::after { width: 18px; border-radius: 6px; background: #215d50; }
+.guide-dot:focus-visible { outline: 2px solid #215d50; outline-offset: 0; }
+.guide-instruction { margin: 10px 0 18px; max-width: 56em; font-size: 17px; line-height: 1.65; color: #203e31; }
+.guide-instruction:focus { outline: none; }
+.guide-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 12px; }
+.guide-result { font-size: 13px; color: #4f6958; }
+.guide-target { outline: 2px solid #438275; outline-offset: 4px; }
+.guide-target:focus-visible { outline-width: 3px; }
+.energy-score-panel { margin-top: 0; }
+@media (max-width: 1000px) {
+  .sidebar .steps { margin-top: 0; }
+  .sidebar .step { min-height: 52px; }
+}
+@media (max-width: 650px) {
+  .top-actions { gap: 6px; }
+  .guide-bar { padding: 16px; margin-bottom: 22px; }
+  .guide-instruction { font-size: 16px; margin: 8px 0 14px; }
+  .guide-progress { gap: 4px; }
+  .guide-dot { width: 30px; height: 36px; }
+  .guide-actions { gap: 8px; }
+  .guide-actions .spacer { display: none; }
+  .guide-actions [data-action="guide-task"] { flex: 1 1 100%; justify-content: center; }
+  .guide-result { margin-right: auto; font-size: 12px; }
+  .guide-actions .button, .guide-actions .text-button { min-height: 44px; }
+  .journey-card { min-height: 100px; }
+  .demo-banner { font-size: 12px; line-height: 1.5; }
+  .dialog-heading { padding-top: 18px; padding-bottom: 16px; }
+}
+@media print {
+  .guide-bar, .demo-banner { display: none; }
+  .guide-target { outline: none; }
+}

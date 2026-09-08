@@ -104,7 +104,7 @@ def run():
     corrupt=mount(b,storage={KEY:'not-json'})
     check('corrupted storage is preserved for recovery',snap(corrupt)[KEY]=='not-json' and '先保護原本的紀錄' in corrupt.locator('#app').inner_text())
     # Demonstration is a separate workspace, not inserted into personal data.
-    separate=mount(b,storage=snapshot);action(separate,'switch-demo')
+    separate=mount(b,storage=snapshot);action(separate,'start-guide')
     check('demo switch preserves personal backup',snap(separate)[KEY]==snapshot[KEY])
     check('no uncaught JavaScript exceptions',not errors)
     (OUT/'ui-checks.json').write_text(json.dumps({'passed':len(checks),'checks':checks,'storage':'deterministic shim, not native origin storage'},ensure_ascii=False,indent=2))
