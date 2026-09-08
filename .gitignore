@@ -1,0 +1,7 @@
+dist/
+node_modules/
+.DS_Store
+*.log
+test-results/
+playwright-report/
+__pycache__/
