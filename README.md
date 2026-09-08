@@ -1,7 +1,79 @@
 # 拾光 Life Atlas
 
-A local-first, responsive annual reflection and life experiment game.
+把這一年攤開，拾起你在乎的事。
 
-Implementation in progress in this repository: monthly event cards, energy timeline, theme hypotheses, GROW Options, resource trade-offs, bidirectional plans, and review loops.
+一個 **local-first、繁體中文、手機與桌面響應式**的年度回顧與生活實驗遊戲。沒有帳號、後端、分析追蹤或執行期第三方套件。示範故事為虛構，個人反思資料不應提交到這個 repository。
 
-No personal reflection data belongs in this repository.
+## 啟動
+
+需要 Node.js 20 以上，不必 `npm install`。
+
+```sh
+npm start
+# http://127.0.0.1:4173
+```
+
+```sh
+npm test
+npm run build
+```
+
+`dist/` 是可部署的靜態網站；`dist/life-atlas-offline.html` 是不需要外部資源的單檔版。在瀏覽器開啟單檔版時，本機儲存可用性依瀏覽器、檔案位置及隱私設定而異；無法儲存時介面會提醒先匯出 JSON。
+
+手機連到同一區網的開發機可用 `HOST=0.0.0.0 npm start`，再開啟開發機的區網 IP 與 4173 埠。請只在可信任的網路使用這個開發伺服器。
+
+## 六段旅程
+
+| 回合 | 操作 | 設計重點 |
+| --- | --- | --- |
+| 拾起片刻 | 每月 0–3 張事件卡；可標示回憶線索、月內順序、另放日常背景 | ORID Objective：事實先於解讀 |
+| 看見起伏 | −10～+10 能量曲線、情緒詞、計畫／意外、回應空間 | 當時與現在的評分分開保存；未評分不是 0 |
+| 發現線索 | 先分群或先命名；多張關聯卡、例外、另一種解讀；另選未來方向 | 主題是假設，年度高頻主題不必成為目標 |
+| 打開可能 | 比較多做、少做、換方法、先觀察等候選路線；記錄選擇理由 | GROW Options 在行動拆解之前；時間、金錢、心力預算與壓力測試 |
+| 帶走實驗 | 方向→路線→實驗，或先行動再關聯方向；目標／成果、習慣、專案、界線、流程 | 頻率、數量、開始線索、執行驗收、方向驗收、阻礙、縮小版、回顧日 |
+| 回來看看 | 執行觀察與方向觀察；繼續、調整、暫停、停止；匯出回顧行事曆事件 | 不用連勝、不補交；用經驗修正方向 |
+
+每段都可跳過。沒有排行榜、人生總分、強迫公開分享或「把每個低谷轉成收穫」的規則。不新增目標也是完整的結束方式。這不是心理測驗、心理治療或已獲臨床驗證的介入。
+
+## 資料與隱私
+
+儲存卡片後會寫入此瀏覽器的 LocalStorage，每個年度分開保留。示範模式使用隔離的記憶體副本，不覆蓋正式資料。跨分頁偵測到新資料時會暫停寫入，讓使用者先備份，再決定是否重新載入。
+
+- **JSON 備份**包含該年度全部內容，包含遮住的卡片，且**未加密**。匯入有版本、型別、範圍、引用與大小驗證，確認後才覆蓋該年度。
+- **SVG 匯出**只含月份、分數與曲線，不含事件標題、筆記或情緒詞。分數仍屬個人資料。
+- **ICS 匯出**使用通用標題，不含實驗內容；需自行匯入行事曆，通知依行事曆設定，不會自動排程。
+- 卡片遮罩只是隱藏文字，月份與分數仍可見。全畫面遮罩也不是密碼鎖或加密。共用裝置、清除網站資料、私密瀏覽與換網址，都需要特別注意備份。
+
+網站本身不送出反思資料。部署平台仍可能有一般 HTTP 存取日誌；這不等於伺服器取得瀏覽器內的反思卡片。
+
+## 專案結構
+
+```text
+index.html             CSP 與頁面入口
+src/model.js           資料模型、嚴格匯入驗證、排序、資源計算、刪除關聯
+src/app.js             六段互動、表單、示範、持久化、備份、SVG／ICS
+src/styles.css         桌面／手機版面、對話框、鍵盤焦點、減少動畫
+scripts/serve.mjs      零依賴本機靜態伺服器，僅提供明確允許的網站檔案
+scripts/build.mjs      靜態網站及單檔 HTML 建置
+tests/model.test.mjs   Node 原生單元測試
+tests/e2e.py           Playwright 操作與版面回歸測試
+```
+
+## 瀏覽器測試
+
+```sh
+python -m pip install playwright==1.57.0
+python -m playwright install chromium
+npm run build
+npm run test:e2e
+```
+
+預設使用真正的本機 HTTP 網頁與 LocalStorage；測試會自行啟動 4178 埠伺服器。`BROWSER_PATH` 可指定 Chromium 執行檔。
+
+在禁止瀏覽器導航的環境，可用 `TEST_MODE=document python tests/e2e.py`。這個模式明確使用本機 HTML 注入、Storage 測試替身和合成 storage 事件，**不能代替真實 HTTP、file:// 或跨分頁持久化驗證**。詳見 [測試說明](docs/TESTING.md)。
+
+## 視覺化與後續
+
+參考了 [AntV Infographic](https://github.com/antvis/Infographic) 的 SVG 與資訊敘事方向；這版使用原生 SVG，沒有加入 AntV 套件或 CDN，避免離線流程依賴外部資源。能量圖是事件順序圖，不是連續心理狀態量測。
+
+這是單人可操作版本，不包含雲端同步、多人協作、PWA 安裝、自動通知、AI 主題判定或任意深度的 OKR 編輯器。方向、路線、實驗與多對多關聯已實作；要增加新層級時應先延伸資料 schema 與遷移測試。
