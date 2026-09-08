@@ -1,0 +1,63 @@
+name: Build canvas runtime
+on:
+  workflow_dispatch:
+  push:
+    branches: [feat/guided-canvas]
+    paths: [.github/workflows/canvas-vendor.yml]
+permissions:
+  contents: write
+jobs:
+  runtime:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Bundle pinned canvas dependencies
+        run: |
+          mkdir -p canvas-runtime src/vendor
+          cat > canvas-runtime/package.json <<'EOF'
+          {"name":"life-atlas-canvas-runtime","private":true,"type":"module","dependencies":{"react":"18.3.1","react-dom":"18.3.1","@xyflow/react":"12.11.6"},"devDependencies":{"esbuild":"0.25.9"}}
+          EOF
+          cat > canvas-runtime/index.js <<'EOF'
+          export { createElement, useState, useRef, useEffect, useCallback, useMemo } from 'react';
+          export { createRoot } from 'react-dom/client';
+          export { ReactFlow, ReactFlowProvider, Controls, Background, MiniMap, Handle, Position, applyNodeChanges, SelectionMode, useReactFlow } from '@xyflow/react';
+          import '@xyflow/react/dist/style.css';
+          EOF
+          cd canvas-runtime
+          npm install --ignore-scripts --no-audit --no-fund
+          node node_modules/esbuild/install.js
+          node_modules/.bin/esbuild index.js --bundle --minify --format=iife --global-name=LifeCanvasVendor --define:process.env.NODE_ENV='"production"' --outfile=../src/vendor/canvas-vendor.js --legal-comments=eof
+          cd ..
+          python3 - <<'PY'
+          from pathlib import Path
+          entries=[]
+          for folder in sorted(Path('canvas-runtime/node_modules').rglob('package.json')):
+              if folder.parent.name in ('node_modules',): continue
+              for license in folder.parent.glob('LICENSE*'):
+                  if license.is_file():
+                      entries.append(str(license.parent.relative_to(Path('canvas-runtime/node_modules'))) + '\n' + license.read_text(errors='replace'))
+                      break
+          Path('src/vendor/THIRD-PARTY-NOTICES.txt').write_text('\n\n'.join(entries))
+          PY
+      - name: Commit generated runtime to this branch
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add canvas-runtime/package.json canvas-runtime/package-lock.json canvas-runtime/index.js src/vendor
+          if ! git diff --cached --quiet; then
+            git commit -m 'build: bundle React Flow 12.11.6 and React 18.3.1 with license notices'
+            git push origin HEAD:feat/guided-canvas
+          fi
+      - uses: actions/upload-artifact@v4
+        with:
+          name: canvas-runtime
+          path: |
+            src/vendor
+            canvas-runtime/package.json
+            canvas-runtime/package-lock.json
+            canvas-runtime/index.js
+          retention-days: 3
