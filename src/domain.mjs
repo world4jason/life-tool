@@ -1,5 +1,5 @@
 /** Pure domain rules. No DOM, network, or storage access. */
-export const VERSION = 1;
+export const VERSION = 2;
 export const MAX_EVENTS_PER_MONTH = 3;
 export const ORIGINS = { planned: '計畫內', surprise: '意外', mixed: '混合', unsure: '不確定' };
 export const INFLUENCES = { direct: '我可以行動', shared: '需要協作', adapt: '調適與支持', unsure: '還不知道' };
@@ -60,7 +60,8 @@ const date = (v, name, optional = true) => { if (optional && v === '') return v;
 /** Strict, whitelisted schema. Import rejects unknown versions, dangling refs and cycles. */
 export function validateState(raw) {
   ownObject(raw, '備份');
-  if (raw.version !== VERSION) fail('不支援這個備份版本；原本的資料沒有被覆寫。');
+  const legacy = raw.version === 1;
+  if (!legacy && raw.version !== VERSION) fail('不支援這個備份版本；原本的資料沒有被覆寫。');
   const s = { version: VERSION, id: id(raw.id), year: num(raw.year, '年份', 1900, 2200, true),
     updatedAt: text(raw.updatedAt, '更新時間', 50), revision: num(raw.revision, '修訂', 0, Number.MAX_SAFE_INTEGER, true),
     frame: pick(raw.frame, ['then', 'now'], '評分視角') };
@@ -84,14 +85,21 @@ export function validateState(raw) {
   }
   s.themes = arr(raw.themes, '主題', 30).map(v => {
     ownObject(v, '主題');
-    return { id: id(v.id), label: text(v.label, '主題名稱', 120), value: text(v.value, '價值方向', 160),
+    return { id: id(v.id), method: legacy ? 'legacy' : pick(v.method, ['binary', 'group', 'legacy'], '分類方法'),
+      unrelatedEventIds: legacy ? [] : ids(v.unrelatedEventIds, '無關事件', 86),
+      label: text(v.label, '主題名稱', 120), value: text(v.value, '價值方向', 160),
       intention: text(v.intention, '未來方向', 500), eventIds: ids(v.eventIds, '事件關聯', 86),
       counterExample: text(v.counterExample, '反例'), alternate: text(v.alternate, '另一種解讀'),
       stance: pick(v.stance, ['explore', 'keep', 'release'], '主題取向'), color: pick(v.color, COLORS, '顏色') };
   });
   uniqueIds(s.themes, '主題');
   const eventSet = new Set(s.events.map(x => x.id)), themeSet = new Set(s.themes.map(x => x.id));
-  s.themes.forEach(t => t.eventIds.forEach(e => { if (!eventSet.has(e)) fail('主題連到不存在的事件'); }));
+  s.themes.forEach(t => {
+    if (t.method === 'binary' && !t.label.trim()) fail('二分類需要詞語');
+    [...t.eventIds, ...t.unrelatedEventIds].forEach(e => { if (!eventSet.has(e)) fail('主題連到不存在的事件'); });
+    if (t.unrelatedEventIds.some(e => t.eventIds.includes(e))) fail('同一個詞的有關與無關事件不能重複');
+    if (t.method !== 'binary' && t.unrelatedEventIds.length) fail('分群不代表其他事件無關');
+  });
   s.routes = arr(raw.routes, '路線', 120).map(v => {
     ownObject(v, '路線');
     return { id: id(v.id), themeId: v.themeId === '' ? '' : id(v.themeId), title: text(v.title, '路線名稱', 160),
@@ -169,7 +177,7 @@ export function newEvent(month = 1, existing = [], kind = 'event') {
     title: '', facts: '', energy: null, feelings: [], origin: 'unsure', influence: 'unsure', important: false, private: false };
 }
 export function newTheme(index = 0) {
-  return { id: uid(), label: '', value: '', intention: '', eventIds: [], counterExample: '', alternate: '', stance: 'explore', color: COLORS[index % COLORS.length] };
+  return { id: uid(), method: 'group', unrelatedEventIds: [], label: '', value: '', intention: '', eventIds: [], counterExample: '', alternate: '', stance: 'explore', color: COLORS[index % COLORS.length] };
 }
 export function newRoute(themeId = '') {
   return { id: uid(), themeId, title: '', kind: 'different', benefit: '', cost: '', firstStep: '', obstacle: '', fallback: '',
@@ -196,7 +204,7 @@ export function descendants(nodes, nodeId) {
 }
 export function removeEntity(state, kind, entityId) {
   const s = clone(state);
-  if (kind === 'events') { s.events = s.events.filter(x => x.id !== entityId); s.themes.forEach(t => t.eventIds = t.eventIds.filter(x => x !== entityId)); }
+  if (kind === 'events') { s.events = s.events.filter(x => x.id !== entityId); s.themes.forEach(t => { t.eventIds = t.eventIds.filter(x => x !== entityId); t.unrelatedEventIds = t.unrelatedEventIds.filter(x => x !== entityId); }); }
   if (kind === 'themes') {
     s.themes = s.themes.filter(x => x.id !== entityId); s.routes.forEach(r => { if (r.themeId === entityId) r.themeId = ''; });
     s.nodes.forEach(n => n.themeIds = n.themeIds.filter(x => x !== entityId));

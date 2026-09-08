@@ -7,7 +7,7 @@ const state = () => validateState(demoState());
 const action = (overrides = {}) => ({ ...newNode(), id:'action-test', startDate:'2026-09-01', ...overrides });
 const log = (amount, overrides = {}) => ({ id:`log-${Math.random().toString(36).slice(2)}`, nodeId:'action-test', date:'2026-09-08', amount, mode:'full', direction:'supports', note:'', decision:'keep', ...overrides });
 
-test('blank and fictional demo satisfy complete schema',()=>{assert.equal(validateState(blankState()).version,1); assert.equal(state().events.length,13);});
+test('blank and fictional demo satisfy complete schema',()=>{assert.equal(validateState(blankState()).version,2); assert.equal(state().events.length,13);});
 test('validation clones input and strips unknown properties',()=>{const s=state();s.unknown='discard';const v=validateState(s);assert.equal(v.unknown,undefined);v.events[0].title='different';assert.notEqual(v.events[0].title,s.events[0].title);});
 test('unrated energy remains null and zero remains zero',()=>{const s=blankState();s.events=[newEvent()];assert.equal(validateState(s).events[0].energy,null);s.events[0].energy=0;assert.equal(validateState(s).events[0].energy,0);});
 test('energy refuses strings, fractions and out of range',()=>{for(const energy of ['2',NaN,Infinity,-11,11,1.5]){const s=blankState();s.events=[{...newEvent(),energy}];assert.throws(()=>validateState(s));}});
@@ -18,7 +18,7 @@ test('duplicate monthly order rejected',()=>{const s=blankState();s.events=[newE
 test('duplicate entity identifiers rejected',()=>{const s=state();s.events[1].id=s.events[0].id;assert.throws(()=>validateState(s),/識別碼/);});
 test('unsafe identifiers rejected; user prose is preserved as data',()=>{const s=state();s.events[0].title='<img src=x onerror=alert(1)>';assert.equal(validateState(s).events[0].title,s.events[0].title);s.events[0].id='" onclick="evil';assert.throws(()=>validateState(s));});
 test('missing fields and wrong booleans rejected',()=>{const s=state();delete s.events[0].private;assert.throws(()=>validateState(s));});
-test('unknown backup version, malformed JSON, oversized content rejected',()=>{assert.throws(()=>parseBackup('{'));assert.throws(()=>parseBackup(JSON.stringify({...state(),version:2})));assert.throws(()=>parseBackup(' '.repeat(2*1024*1024+1)));});
+test('unknown backup version, malformed JSON, oversized content rejected',()=>{assert.throws(()=>parseBackup('{'));assert.throws(()=>parseBackup(JSON.stringify({...state(),version:999})));assert.throws(()=>parseBackup(' '.repeat(2*1024*1024+1)));});
 test('JSON export/import round trip',()=>{const s=state();assert.deepEqual(parseBackup(JSON.stringify(s)),s);});
 test('dangling event, theme and route relations rejected',()=>{for(const mutate of [s=>s.themes[0].eventIds.push('missing'),s=>s.routes[0].themeId='missing',s=>s.nodes[0].routeId='missing']){const s=state();mutate(s);assert.throws(()=>validateState(s));}});
 test('duplicate many-to-many links rejected',()=>{const s=state();s.themes[0].eventIds.push(s.themes[0].eventIds[0]);assert.throws(()=>validateState(s),/重複關聯/);});

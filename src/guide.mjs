@@ -1,10 +1,10 @@
-import { clone, demoState, newEvent, newNode, validateState } from './domain.mjs';
+import { clone, demoState, newEvent, newNode, validateState } from './domain.mjs?v=discovery-3';
 
 // A disposable example, never a migration or a replacement for personal data.
 export const GUIDE_STEPS = [
   { text: '打開六月的旅行卡，看看事件怎麼記。文字和發生方式都可以修改。', action: '打開事件卡', form: 'event', target: 'demo-event-5', field: 'title' },
   { text: '拖曳六月卡片調整順序；點「評分」移動能量滑桿，按儲存。', action: '試著評分', form: 'event', target: 'demo-event-5', field: 'energy' },
-  { text: '這幾張卡都與「留白」有關。打開主題，試著改名或增減關聯卡片。', action: '查看分群', form: 'theme', target: 'demo-space', field: 'label' },
+  { text: '用「自由」將事件分成有關與無關；切換「分群」可把卡片成群命名。', action: '操作分類', form: 'discovery', target: 'demo-space', field: 'word' },
   { text: '保留空白晚上、短旅行、先觀察，都可能增加自主感。比較下方三條路，再選一條。', action: '試選空白晚上', form: 'choice', target: 'demo-route-1', field: 'reason' },
   { text: '把路線變成行動。這份範例已填好次數、驗收、備案和回顧日，試著修改一項。', action: '編輯實驗', form: 'node', target: 'guide-action', field: 'target' },
   { text: '假設已經試過一次，記下執行量、感受，以及下次要維持或調整什麼。', action: '試記一筆回顧', form: 'review', target: 'guide-action', field: 'amount' }
@@ -16,6 +16,7 @@ export function createGuideState() {
   Object.assign(s.events.find(e => e.id === 'demo-event-5'), { energy: null, order: 2 });
   s.events.push({ ...newEvent(6), id: 'guide-june-work', title: '旅行前趕完工作', facts: '把交付集中在出發前一週。', energy: -4, origin: 'mixed', order: 1 });
   s.themes = s.themes.filter(t => t.id === 'demo-space');
+  Object.assign(s.themes[0], { method: 'binary', label: '自由', eventIds: [], unrelatedEventIds: [] });
   s.routes.forEach(r => { r.selected = false; r.reason = ''; });
   s.nodes = []; s.reviews = [];
   s.reflection = { notice: '', surprise: '', keep: '', release: '' };

@@ -39,7 +39,7 @@ def run():
     fill(p,'energy',8)
     p.screenshot(path=str(OUT/'guide-rating-desktop.png'),full_page=True)
     save(p);check('score updates on actual card',p.locator('.guide-target .energy').inner_text()=='+8')
-    action(p,'guide-next');action(p,'guide-task');fill(p,'label','留白與自主');save(p)
+    action(p,'guide-next');action(p,'d-rename');p.locator('[data-discovery-form="name"] input').fill('留白與自主');p.locator('[data-discovery-form="name"] button').click()
     check('theme name can be changed in tutorial','留白與自主' in p.locator('#main').inner_text())
     action(p,'guide-next')
     check('options include three genuinely different routes',p.locator('.route-card').count()==3)
@@ -79,6 +79,10 @@ def run():
       for chapter in range(1,7):
         step(layout,chapter)
         assert not layout.evaluate('document.documentElement.scrollWidth>innerWidth+1'),(width,chapter)
+        if chapter == 3:
+          assert layout.locator('.discovery-answer-buttons').count()==1
+          layout_checks+=1
+          continue
         action(layout,'guide-task')
         assert not layout.locator('#editor').evaluate('(d)=>d.scrollWidth>d.clientWidth+1'),(width,chapter,'dialog')
         assert layout.locator('#editor button[type="submit"]').is_visible(),(width,chapter,'save')
@@ -87,7 +91,7 @@ def run():
         step(layout,2);layout.screenshot(path=str(OUT/'guide-mobile.png'),full_page=True)
       if width==1440:
         step(layout,4);layout.screenshot(path=str(OUT/'guide-options-desktop.png'),full_page=True)
-    check('30 chapter/viewport pairs and dialogs fit',layout_checks==30)
+    check('30 chapter/viewport pairs fit; 25 use dialogs, discovery stays inline',layout_checks==30)
     check('no uncaught page errors',not errors)
     (OUT/'guide-checks.json').write_text(json.dumps({'checks':checks,'passed':len(checks),'layoutPairs':layout_checks,'environment':'Chromium + deterministic Storage shim; not physical mobile/native persistence'},ensure_ascii=False,indent=2))
     b.close()

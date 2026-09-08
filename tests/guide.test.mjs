@@ -7,8 +7,8 @@ test('six guide steps have concrete actions and form targets', () => {
   assert.equal(GUIDE_STEPS.length, 6);
   for (const step of GUIDE_STEPS) assert.ok(step.text && step.action && step.form && step.target && step.field);
 });
-test('guide sample conforms to unchanged backup schema', () => {
-  assert.deepEqual(validateState(createGuideState()).version, 1);
+test('guide sample conforms to v2 backup schema', () => {
+  assert.deepEqual(validateState(createGuideState()).version, 2);
 });
 test('scoring example begins unrated, never implicit zero', () => {
   assert.equal(createGuideState().events.find(e => e.id === 'demo-event-5').energy, null);

@@ -3,9 +3,10 @@ import {
   FEELINGS, VALUES, COLORS, uid, clone, dateString, addDays, blankState, validateState,
   parseBackup, newEvent, newTheme, newRoute, newNode, sortedEvents, budgetUsage,
   descendants, removeEntity, progressFor, actionReadiness, demoState
-} from './domain.mjs';
-import { GUIDE_STEPS, createGuideState, prepareGuideStep } from './guide.mjs?v=energy-2';
+} from './domain.mjs?v=discovery-3';
+import { GUIDE_STEPS, createGuideState, prepareGuideStep } from './guide.mjs?v=discovery-3';
 import { reorderMonthlyEvents, installMonthOrdering } from './month-order.mjs';
+import { createDiscovery } from './discovery.mjs?v=discovery-3';
 
 const $ = selector => document.querySelector(selector);
 const esc = value => String(value ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
@@ -86,6 +87,8 @@ function commit(mutator, message = '') {
     if (!training) try {
       if (conflict || localStorage.getItem(key) !== lastRaw) { conflict = true; throw new Error('另一個分頁已更新資料；本頁暫停儲存，請先下載本頁備份，再載入最新版本。'); }
       const serialized = JSON.stringify(valid);
+      // Keep the untouched v1 snapshot before the first upgraded write.
+      if (lastRaw && JSON.parse(lastRaw).version === 1) localStorage.setItem(`${key}.before-v2`, lastRaw);
       localStorage.setItem(key, serialized); lastRaw = serialized; unsaved = false; storeWarning = '';
     } catch (error) { unsaved = true; storeWarning = conflict ? error.message : '儲存失敗（可能空間不足或瀏覽器限制）。本頁變更仍在記憶體中，請下載備份。'; }
     state = valid; render(); if (message) toast(unsaved ? storeWarning : message, unsaved); return true;
@@ -99,7 +102,7 @@ function toast(message, error = false) {
   clearTimeout(toast.timer); toast.timer = setTimeout(() => el.classList.remove('visible'), 5000);
 }
 function showFormError(message) {
-  const el = $('#form-error'); if (el) { el.textContent = message; el.hidden = false; el.focus(); } else toast(message, true);
+  const el = $('#form-error'); if (el && $('#editor').open) { el.textContent = message; el.hidden = false; el.focus(); } else toast(message, true);
 }
 function titleOf(event) { return event.private && ui.hidePrivate ? '私密事件' : event.title; }
 function eventMeta(event) { return `${event.kind === 'background' ? '日常背景' : `${event.month} 月 · ${event.order}`} / ${ORIGINS[event.origin]}`; }
@@ -223,23 +226,7 @@ function energyView() {
     ${background.length ? `<section class="energy-background"><h2>日常背景</h2><div class="cards-grid">${background.map(e => eventCard(e)).join('')}</div></section>` : ''}
     ${chapterFooter(3, '發現線索')}`;
 }
-function themesView() {
-  const unassigned = state.events.filter(e => !state.themes.some(t => t.eventIds.includes(e.id))).length;
-  return `${heading(STEPS[3][3], '發現線索', ui.themeMode === 'cards' ? '勾選有共同情境、感受或需要的事件，按「用這些卡建立主題」命名。' : '點選詞語，在視窗勾選相關事件並儲存。', button(`${icon('plus')}建立主題`, 'add-theme', 'button primary'))}
-    <div class="theme-toolbar"><div class="segmented">${button('卡片分群', 'theme-cards', ui.themeMode === 'cards' ? 'selected' : '', `aria-pressed="${ui.themeMode === 'cards'}"`)}${button('詞語連結', 'theme-words', ui.themeMode === 'words' ? 'selected' : '', `aria-pressed="${ui.themeMode === 'words'}"`)}</div><span class="micro">${unassigned} 張未分類</span></div>
-    ${ui.themeMode === 'words' ? `<div class="word-bank">${VALUES.map(word => button(esc(word), 'theme-word', 'word-chip', `data-word="${attr(word)}"`)).join('')}</div>` : ''}
-    <div class="theme-workspace"><section><div class="section-title"><h2>事件卡</h2><span class="micro">已選 ${ui.eventSelection.size} 張</span></div>
-      ${ui.eventSelection.size ? `<div class="selection-bar"><span>${ui.eventSelection.size} 張已選</span>${button('用這些卡建立主題', 'group-events', 'button small primary')}</div>` : ''}
-      <div class="source-cards">${state.events.map(e => eventCard(e, false, true)).join('') || empty('還沒有事件卡', '可以先回去記錄，或直接從一個詞開始。', button('回去拾起片刻', 'go', 'button quiet', 'data-step="1"'))}</div></section>
-      <section class="theme-column"><div class="section-title"><h2>主題</h2></div>
-      ${state.themes.map(theme => `<article class="theme-card ${theme.color}"><div class="card-top">${chip(({ keep: '想延續', release: '想放下', explore: '還在探索' })[theme.stance])}${button(icon('edit'), 'edit-theme', 'icon-button', `data-id="${theme.id}" aria-label="編輯主題${attr(theme.label)}"`)}</div>
-        <h3>${esc(theme.label)}</h3>${theme.value ? `<p class="theme-value">${esc(theme.value)}</p>` : ''}
-        <div class="linked-events">${theme.eventIds.map(id => state.events.find(e => e.id === id)).filter(Boolean).map(e => chip(`${e.kind === 'background' ? '日常' : e.month + '月'} · ${esc(titleOf(e))}`, 'linked')).join('') || '<span class="micro">暫時還沒有連到片刻。</span>'}</div>
-        <div class="hypothesis">${theme.alternate ? `<p>其他解讀：${esc(theme.alternate)}</p>` : ''}${theme.counterExample ? `<p>反例：${esc(theme.counterExample)}</p>` : ''}</div>
-        ${theme.intention ? `<p class="intention">${icon('compass')}${esc(theme.intention)}</p>` : ''}
-        ${button(`為這個方向找路${icon('arrow')}`, 'theme-options', 'text-button', `data-id="${theme.id}"`)}</article>`).join('') || empty('不必一開始就知道答案', '勾選幾張有共通感的片刻，試著用自己的話命名。')}
-      </section></div>${chapterFooter(4, '打開不同的可能')}`;
-}
+function themesView() { return discovery.render(); }
 function resourceMeters() {
   const b = budgetUsage(state, ui.stress ? 0.5 : 1);
   return `<div class="resource-grid">${[['hours', 'clock', '每週可用時間', '小時'], ['money', 'cards', '每月可用預算', '元'], ['energy', 'leaf', '每週心力籌碼', '點']].map(([k, ic, label, unit]) => `<div class="resource ${b.over.includes(k) ? 'over' : ''}"><div>${icon(ic)}<span>${label}</span></div><strong>${fmt(b.totals[k])}<small> / ${fmt(b.available[k])} ${unit}</small></strong><div class="meter"><i style="width:${Math.min(100, b.available[k] ? b.totals[k] / b.available[k] * 100 : b.totals[k] ? 100 : 0)}%"></i></div><span class="micro">${b.over.includes(k) ? '超出預算' : ''}</span></div>`).join('')}</div>`;
@@ -249,6 +236,7 @@ function optionsView() {
   const selected = state.routes.filter(r => r.selected).length;
   const kinds = new Set(routes.map(r => r.kind));
   return `${heading(STEPS[4][3], '打開可能', '比較不同做法、資源和代價，再做選擇。', button(`${icon('plus')}新增一條路`, 'add-route', 'button primary'))}
+    ${discovery.options(ui.routeTheme)}
     <section class="possibility-card"><div><p>${esc(PROMPTS[ui.prompt])}</p></div>${button(`${icon('loop')}換一個提問`, 'draw-prompt', 'button quiet')}</section>
     <div class="section-title"><h2>資源預算</h2>${button('調整資源預算', 'budget', 'text-button')}</div>${resourceMeters()}
     <div class="resource-note"><p class="micro">時間以每週、金錢以每月比較；一次性支出請換算並寫在代價中。心力籌碼只是自己的容量估計，不是心理量測。</p><label class="toggle"><input type="checkbox" id="stress-toggle" ${ui.stress ? 'checked' : ''}><span>壓力測試：可用時間只剩一半</span></label></div>
@@ -316,10 +304,11 @@ function recoveryView() {
   return `<section class="recovery panel"><h1>先保護原本的紀錄。</h1><p>本機資料無法通過格式檢查：${esc(recovery)}</p><p>原始內容仍保留，沒有用空白資料覆蓋。先下載原始檔，再選擇匯入可用備份或重新開始。</p><div class="inline">${button('下載原始資料', 'raw-backup', 'button primary')}${button('匯入備份', 'import', 'button quiet')}${button('重新開始', 'reset', 'button quiet')}</div></section>`;
 }
 function guideBar() {
-  if (!training) return '';
+  if (!training || ui.step === 3) return '';
   if (!ui.step) return '';
   const g = GUIDE_STEPS[ui.step - 1], done = training.done.has(ui.step);
-  return `<section class="guide-bar" aria-label="操作引導"><div class="guide-progress"><span aria-label="第 ${ui.step} 步，共 6 步">${ui.step} / 6</span><div>${GUIDE_STEPS.map((_, i) => `<button type="button" class="guide-dot ${i + 1 === ui.step ? 'current' : ''}" data-action="go" data-step="${i + 1}" aria-label="示範第 ${i + 1} 步：${STEPS[i + 1][1]}" ${i + 1 === ui.step ? 'aria-current="step"' : ''}></button>`).join('')}</div></div><p class="guide-instruction" tabindex="-1">${esc(g.text)}</p><div class="guide-actions">${button(g.action, 'guide-task', 'button primary small')}<span class="guide-result" role="status">${done ? '已練習' : '可直接看下一步'}</span><div class="spacer"></div>${ui.step > 1 ? button('上一步', 'guide-back', 'text-button') : ''}${button(ui.step === 6 ? '結束示範' : '下一步', 'guide-next', 'button quiet small')}</div></section>`;
+  const customDirection = ui.step === 4 && ui.routeTheme && ui.routeTheme !== 'demo-space';
+  return `<section class="guide-bar" aria-label="操作引導"><div class="guide-progress"><span aria-label="第 ${ui.step} 步，共 6 步">${ui.step} / 6</span><div>${GUIDE_STEPS.map((_, i) => `<button type="button" class="guide-dot ${i + 1 === ui.step ? 'current' : ''}" data-action="go" data-step="${i + 1}" aria-label="示範第 ${i + 1} 步：${STEPS[i + 1][1]}" ${i + 1 === ui.step ? 'aria-current="step"' : ''}></button>`).join('')}</div></div><p class="guide-instruction" tabindex="-1">${esc(customDirection ? '為選定的方向寫出不同做法，比較資源和代價。' : g.text)}</p><div class="guide-actions">${button(customDirection ? '新增做法' : g.action, 'guide-task', 'button primary small')}<span class="guide-result" role="status">${done ? '已練習' : '可直接看下一步'}</span><div class="spacer"></div>${ui.step > 1 ? button('上一步', 'guide-back', 'text-button') : ''}${button(ui.step === 6 ? '結束示範' : '下一步', 'guide-next', 'button quiet small')}</div></section>`;
 }
 function highlightGuideTarget() {
   if (!training || !ui.step) return;
@@ -332,8 +321,9 @@ function startGuide() {
   if ($('#editor').open) closeDialog();
   if (training) return go(1);
   const returnTo = { state, demo, key, lastRaw, unsaved, conflict, recovery, storeWarning,
-    ui: { ...ui, eventSelection: new Set(ui.eventSelection), actionSelection: new Set(ui.actionSelection) } };
+    ui: { ...ui, eventSelection: new Set(ui.eventSelection), actionSelection: new Set(ui.actionSelection) }, discovery: discovery.snapshot() };
   training = { returnTo, done: new Set(), routeId: '' };
+  discovery.reset();
   state = createGuideState(); demo = true; lastRaw = null; unsaved = false; conflict = false; recovery = ''; storeWarning = '';
   ui.eventSelection.clear(); ui.actionSelection.clear(); ui.routeTheme = ''; ui.view = 'graph'; ui.month = 6; ui.stress = false;
   go(1);
@@ -345,6 +335,7 @@ function exitGuide(beginPersonal = false) {
   training = null;
   ({ state, demo, key, lastRaw, unsaved, conflict, recovery, storeWarning } = prior);
   Object.assign(ui, prior.ui);
+  discovery.restore(prior.discovery);
   // A second tab may have changed the saved workspace while the example was open.
   try { if (localStorage.getItem(key) !== lastRaw) conflict = true; } catch { /* Preserve the original storage warning. */ }
   if (conflict) storeWarning = '另一個分頁更新了資料。本頁暫停儲存，請先下載備份，再載入最新版本。';
@@ -363,12 +354,10 @@ function runGuideTask() {
     if (!state.events.some(e => e.id === g.target)) return toast('這張範例已刪除。可用其他卡片練習，或離開後重開示範。');
     eventDialog(g.target);
   }
-  if (g.form === 'theme') {
-    if (!state.themes.some(t => t.id === g.target)) return themeDialog();
-    themeDialog(g.target);
-  }
+  if (g.form === 'discovery') return go(3);
   if (g.form === 'choice') {
-    const r = state.routes.find(r => r.id === g.target) || state.routes[0];
+    const candidates = state.routes.filter(r => !ui.routeTheme || r.themeId === ui.routeTheme);
+    const r = candidates.find(r => r.id === g.target) || candidates[0];
     if (!r) return routeDialog();
     choiceDialog(r);
   }
@@ -487,17 +476,6 @@ function eventDialog(entityId = '', month = ui.month, kind = 'event') {
   syncEnergyControl();
 }
 
-function themeDialog(entityId = '', word = '', chosen = []) {
-  const t = state.themes.find(x => x.id === entityId) || { ...newTheme(state.themes.length), label: word, value: word, eventIds: chosen };
-  const choices = `<fieldset class="choice-fieldset"><legend>哪些片刻支持這個理解？可連到多個主題。</legend><div class="event-checklist">${state.events.map(e => checkField(`${esc(titleOf(e))}<small>${e.kind === 'background' ? '日常背景' : e.month + ' 月'}</small>`, 'eventIds', t.eventIds.includes(e.id), e.id)).join('') || '<p class="muted">目前沒有事件；可以先記下一個詞。</p>'}</div></fieldset>`;
-  openDialog('編輯主題', '',
-    `${field('主題名稱', 'label', t.label, { required: true, max: 120 })}${field('在乎什麼', 'value', t.value, { max: 160, help: '' })}
-    ${choices}<div class="form-grid">${textarea('不太符合的卡片或反例', 'counterExample', t.counterExample, '')}${textarea('還有另一種合理解讀嗎？', 'alternate', t.alternate)}</div>
-    ${selectField('這個主題', 'stance', t.stance, { explore: '還在探索', keep: '想延續', release: '想放下' })}
-    ${textarea('接下來的方向', 'intention', t.intention, '', 500)}`, 'theme', t.id,
-    entityId ? button(`${icon('trash')}刪除主題`, 'delete-theme', 'text-button danger', `data-id="${t.id}"`) : '');
-  dialogContext.entity = t;
-}
 function routeDialog(entityId = '', preset = null) {
   const r = state.routes.find(x => x.id === entityId) || preset || newRoute(ui.routeTheme);
   openDialog('編輯路線', '',
@@ -628,7 +606,7 @@ function switchWorkspace(nextDemo) {
     if (demo) url.searchParams.set('demo', '1'); else url.searchParams.delete('demo');
     try { history.replaceState({}, '', url); } catch { /* Local file contexts may restrict URL replacement. */ }
     ui.eventSelection.clear(); ui.actionSelection.clear(); ui.routeTheme = ''; ui.step = demo ? 2 : 0;
-    load(); render(); window.scrollTo({ top: 0, behavior: 'instant' });
+    discovery.reset(); load(); render(); window.scrollTo({ top: 0, behavior: 'instant' });
   };
   if (unsaved) confirmDialog('有尚未儲存的變更', `<p>切換會捨棄本頁未儲存的內容，請先下載備份。</p>${button('下載備份', 'export-json', 'button quiet')}`, perform);
   else perform();
@@ -677,11 +655,6 @@ function submitForm(form) {
         return s;
       }, '片刻已保存');
     }
-    if (ctx.type === 'theme') {
-      const t = { ...ctx.entity, label: get('label'), value: get('value'), intention: get('intention'), counterExample: get('counterExample'), alternate: get('alternate'), stance: get('stance'), eventIds: all('eventIds') };
-      if (!t.label) throw new Error('主題名稱可以暫時，也可以是「還在探索」。');
-      success = updateList('themes', t); if (success) ui.eventSelection.clear();
-    }
     if (ctx.type === 'route') {
       const r = { ...ctx.entity, themeId: get('themeId'), title: get('title'), kind: get('kind'), benefit: get('benefit'), cost: get('cost'), firstStep: get('firstStep'), obstacle: get('obstacle'), fallback: get('fallback'),
         hours: number(get('hours')), money: number(get('money')), energy: number(get('energy')), confidence: number(get('confidence')), reason: has('reason') ? get('reason') : ctx.entity.reason };
@@ -723,7 +696,7 @@ function submitForm(form) {
       // Preserve the previous valid/raw snapshot before replacing it; no partial import.
       try { if (lastRaw) localStorage.setItem(`${key}.previous`, lastRaw); } catch { throw new Error('無法保存取代前快照。請先下載原始備份並釋放儲存空間後重試。'); }
       recovery = ''; success = commit(pendingImport, '已完整匯入備份');
-      if (success) { pendingImport = null; ui.eventSelection.clear(); ui.actionSelection.clear(); ui.routeTheme = ''; }
+      if (success) { pendingImport = null; discovery.reset(); ui.eventSelection.clear(); ui.actionSelection.clear(); ui.routeTheme = ''; }
     }
     if (success) {
       if (training && GUIDE_STEPS[ui.step - 1]?.form === ctx.type) {
@@ -736,6 +709,7 @@ function submitForm(form) {
 }
 function handleAction(action, el) {
   const id = el.dataset.id || '';
+  if (action.startsWith('d-')) return discovery.action(action, el);
   if (action === 'start-guide' || action === 'switch-demo') return startGuide();
   if (action === 'guide-exit') return exitGuide();
   if (action === 'guide-finish') return exitGuide(true);
@@ -757,13 +731,12 @@ function handleAction(action, el) {
   if (action === 'zero-energy') { const slider = $('#editor input[name="energy"]'); if (slider) { slider.value = '0'; syncEnergyControl(true); } return; }
   if (action === 'view-graph' || action === 'view-list') { ui.view = action === 'view-graph' ? 'graph' : 'list'; render(); return; }
   if (action === 'month') { ui.month = number(el.dataset.month); render(); return; }
-  if (action === 'theme-cards' || action === 'theme-words') { ui.themeMode = action === 'theme-cards' ? 'cards' : 'words'; render(); return; }
-  if (action === 'add-theme') return themeDialog();
-  if (action === 'theme-word') return themeDialog('', el.dataset.word);
-  if (action === 'group-events') return themeDialog('', '', [...ui.eventSelection]);
-  if (action === 'edit-theme') return themeDialog(id);
   if (action === 'theme-options') { ui.routeTheme = id; return go(4); }
-  if (action === 'add-route') return routeDialog();
+  if (action === 'add-route') {
+    const theme = state.themes.find(t => t.id === ui.routeTheme);
+    if (theme && !theme.intention.trim()) { $('#discovery-direction-input')?.focus(); return toast('寫下方向，再比較做法。'); }
+    return routeDialog();
+  }
   if (action === 'edit-route') return routeDialog(id);
   if (action === 'draw-prompt') { ui.prompt = (ui.prompt + 1) % PROMPTS.length; render(); return; }
   if (action === 'observe-route') return routeDialog('', { ...newRoute(ui.routeTheme), title: '先不改變，觀察兩週', kind: 'keep', firstStep: '留下一句今天的觀察', benefit: '先確認什麼真正重要，再決定是否改變' });
@@ -803,6 +776,16 @@ function handleAction(action, el) {
     recovery = ''; ui.eventSelection.clear(); ui.actionSelection.clear(); ui.routeTheme = ''; if (commit(blankState(), '已開始新一輪')) go(0);
   });
 }
+const discovery = createDiscovery({
+  esc, icon, button, getState: () => state, hidePrivate: () => ui.hidePrivate,
+  training: () => !!training, isDiscovery: () => ui.step === 3,
+  commit, render, toast, openDialog, closeDialog,
+  practiced: () => { if (training) training.done.add(3); },
+  deleteTheme: id => askDelete('themes', id),
+  options: id => { ui.routeTheme = id; go(4); },
+  practice: mode => { startGuide(); discovery.reset(mode); go(3); }
+});
+
 installMonthOrdering({
   announce: message => toast(message),
   move(eventId, targetIndex, expectedIds) {
@@ -852,6 +835,12 @@ window.addEventListener('storage', event => {
     conflict = true; storeWarning = '另一個分頁更新了探索桌。本頁已暫停儲存，請先下載本頁備份，再載入最新版本。'; render();
   }
 });
-window.addEventListener('beforeunload', event => { if (unsaved || training?.returnTo.unsaved) { event.preventDefault(); event.returnValue = ''; } });
-if (new URLSearchParams(location.search).get('guide') === '1') startGuide();
-else render();
+window.addEventListener('beforeunload', event => { if (unsaved || training?.returnTo.unsaved || discovery.hasDrafts()) { event.preventDefault(); event.returnValue = ''; } });
+if (new URLSearchParams(location.search).get('guide') === '1') {
+  startGuide();
+  const params = new URLSearchParams(location.search), step = Number(params.get('step'));
+  if (step >= 1 && step <= 6) {
+    discovery.reset(params.get('method') === 'group' ? 'group' : 'binary');
+    go(step);
+  }
+} else render();

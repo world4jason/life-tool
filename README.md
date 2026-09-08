@@ -1,99 +1,76 @@
 # 拾光 Life Atlas
 
-**事件是素材，主題是假設，行動是實驗。**
+繁體中文年度回顧與行動規劃網頁。支援桌面與手機，不需要帳號，生活紀錄不會上傳。
 
-以繁體中文設計的年度回顧網頁遊戲。支援手機、平板與桌面；不用帳號，不上傳生活紀錄，沒有排行榜。先從「先玩一輪示範」認識流程，示範資料完全虛構，與個人探索桌分開儲存。
+[開啟網頁](https://world4jason.github.io/life-tool/) · [二分類示範](https://world4jason.github.io/life-tool/?guide=1&step=3) · [分群示範](https://world4jason.github.io/life-tool/?guide=1&step=3&method=group)
 
-## 開始使用
+## 操作
 
-需要 Node.js 22 或更新版本；沒有 npm 安裝依賴。
+| 頁面 | 操作 |
+| --- | --- |
+| 拾起片刻 | 每月記下 0–3 件事，標示計畫內／意外等發生方式。固定日常另外記錄。 |
+| 看見起伏 | −10～＋10 能量評分，拖曳或用箭頭調整同月順序。事件摘要唯讀，不填情緒或觀察。 |
+| 發現線索 | 二分類：選詞後逐張判斷有關／無關；分群：把事件放成群後命名。提供步驟提示、例子、拖曳、移動選單及復原。 |
+| 打開可能 | 選擇詞語，確認想保留或改變的方向，比較不同做法與資源代價。 |
+| 帶走實驗 | 方向 O → 成果 KR → 行動；也可以由行動向上聚類。設定數量、頻率、驗收、開始線索、備案與回顧日。 |
+| 回來看看 | 分開記錄執行與方向感受，再決定維持、調整、減量、暫停或停止。 |
+
+分類不推定正負：耗損的事件也可能與詞語有關；未操作不等於無關。每個詞保留獨立判斷，同一事件也能加入多個群。涵蓋數量不是目標優先順序。分類與命名不會改寫後面的路線或行動。
+
+「操作示範」使用隔離的虛構資料，退出恢復原本的回顧；示範練習不會寫入個人紀錄。每段可以跳過，不新增目標也能結束。
+
+## 執行
+
+Node.js 22 以上，沒有 npm 安裝依賴。
 
 ```sh
 git clone https://github.com/world4jason/life-tool.git
 cd life-tool
 npm run dev
-# 開啟 http://localhost:4173
+# http://localhost:4173
 ```
 
-打包成可直接開啟、沒有外部資源的單一 HTML：
+根目錄可以直接由靜態主機提供；入口與模組使用相對路徑，支援 GitHub Pages 專案子路徑。Pages 使用 `main / (root)`。更新 main 後，部署狀態以 repository 的 Actions 紀錄為準。
 
 ```sh
 npm run check
 npm run build
-# dist/index.html：CSS 與程式都內嵌，可下載後離線開啟。
-# 檔案網址的儲存行為依瀏覽器而異，正式使用建議透過 HTTP(S)。
+# dist/index.html：包含所有 CSS 與 JavaScript 的單檔版。
 node scripts/serve.mjs --dist
 ```
 
-也可以使用任何靜態主機直接提供專案根目錄，不必先建置。所有資源採用相對路徑，適用 GitHub Pages 專案子路徑。
+單檔版沒有 CDN、外部字型或追蹤請求。直接以檔案網址開啟時，儲存行為依瀏覽器而異；正式使用建議 HTTP(S)。
 
-### GitHub Pages
+## 資料
 
-在 repository 的 **Settings → Pages → Deploy from a branch → main / (root) → Save** 啟用。根目錄已提供入口、原始模組與 `.nojekyll`；不需要自訂建置流程，但 Pages 本身仍經由 GitHub Actions 部署。啟用成功後，以 Pages 設定頁顯示的實際網址為準。本專案交付不代表已經修改 Pages 管理設定或完成線上部署。
+分類操作即時保存；文字表單按儲存或確認後保存。未提交文字只在目前頁面記憶體中，不是可跨重新載入的草稿。每個瀏覽器／網站來源的個人桌保留一輪；跨裝置使用完整 JSON 備份／匯入，沒有雲端同步。
 
-[GitHub 官方部署說明](https://docs.github.com/en/pages/getting-started-with-github-pages/configuring-a-publishing-source-for-your-github-pages-site)
+JSON 備份含私密文字，**未加密**。私密標記只遮蔽畫面，不是密碼鎖。SVG 探索地圖排除私密事件；主題與行動的手寫私人文字仍需自行檢查。摘要最多顯示前六個主題及行動，完整內容在 JSON。
 
-## 怎麼玩
+v2 支援讀取 v1。原主題保留為分群，未勾選的事件不會被轉成無關。首次升級儲存前保留原始快照；其他舊分頁應重新整理。v2 備份不能交給舊版網頁使用。損壞資料不會被空白覆蓋；儲存配額錯誤或其他分頁衝突時提醒下載備份。
 
-| 關卡 | 實際操作 |
-| --- | --- |
-| 拾起片刻 | 每月 0–3 張事件卡；先寫事實、計畫／意外／混合／不確定。持續發生的日常另放背景區。 |
-| 看見起伏 | 以 −10～＋10 記錄能量；可以不評分。情緒、重要性與回應空間分開。提供年度 SVG 曲線與逐月卡片。 |
-| 發現線索 | 先選事件聚類，或先選／自訂價值詞。卡片可連到多個主題；記錄反例、另一種解讀與未來方向。 |
-| 打開可能 | 先探索做更多、做更少、換方法、維持現況、暫時不做，再比較時間／金錢／心力。提問卡、選擇理由、時間減半壓力測試與可撤回的第一步。 |
-| 帶走實驗 | 方向 O → 成果 KR → 行動，可多層拆解；也可先寫行動再向上聚類。區分習慣、體驗、成果、界線、固定流程，寫驗收、頻率、觸發條件、縮小版與備案。 |
-| 回來看看 | 完整執行、縮小版、未執行與純反思分開；同時追蹤執行量與方向感受。允許維持、調整、減量、暫停、停止。 |
+清除網站資料會刪除本機紀錄。請定期備份，不要把個人的 JSON 提交到公開 repository。
 
-### 評分時專注感受
+## 驗證
 
-「看見起伏」中的既有卡片會開啟評分專用視窗：分數與滑桿直接顯示，事件月份、名稱、事實、發生方式與私密狀態為唯讀摘要，只有月內順序能調整。長事實可展開查看；需要修改事件內容時，回到「拾起片刻」。新卡片仍使用完整編輯表單。
-
-發生方式改為「計畫內／意外／混合／不確定」單選標籤，評分摘要只顯示已選標籤。滑桿可直接操作，未評分不會自動變成零；「記為 0 分」是明確選擇，亦可選擇「暫時不評分」。
-
-### 兩個 O，不混在一起
-
-**ORID 的 Objective** 放在回顧開頭：先記錄發生的事，暫緩詮釋。**GROW 的 Options** 放在主題與行動之間：比較不同路線，而不只是把同一個方法增加次數。比較後才選擇、寫理由與備案；可以保留未選路線，或記錄「先不比較／暫不新增目標」。系統不強迫湊出特定數量的目標。
-
-主題不是 AI 判決，能量不是人生分數。圖上的線只是串聯被選出的事件，不是全年連續心理狀態量測。沒有事件的月份不補零，未評分與零分不同。切換「當時／現在回看」評分視角需要確認，並清空分數以免混用定義，事件文字仍保留。
-
-## 保存、匯出與隱私
-
-按對話框的「儲存」後保存至本機；**尚未送出的表單不是自動保存草稿**。每個瀏覽器／網站來源的個人桌與示範桌各保留一輪，跨裝置需匯出、匯入 JSON，沒有雲端同步。
-
-完整 JSON 備份包含私密文字，**不是加密檔**。私密標記只遮蔽畫面文字，不是身份驗證或存取控制。SVG 探索地圖排除私密事件，但主題／行動裡手寫的私人內容仍需要自行檢查；摘要最多呈現前六個主題、前六個行動，完整資料在 JSON。
-
-匯入先驗證版本、大小、欄位、關聯和循環，再要求確認取代；不做隱式合併。舊資料格式損壞時保留原始內容，提供下載而不是用空白覆蓋。儲存空間不足時顯示「尚未儲存」並保留記憶體內容；偵測其他分頁更新後暫停寫入，讓使用者先下載本頁版本再決定。
-
-請定期下載備份。清除瀏覽器資料、裝置故障或無痕模式都可能造成紀錄遺失。不要把自己的 JSON 回顧紀錄提交到公開 repository。
-
-## 開發與驗收
+本版本機執行：91 項單元測試、38 項分類介面檢查；既有 flows 27、guide 22、rating 42、energy-board 40 項檢查通過。分類兩種模式在 320、390、768、1024、1440px 檢查無整頁水平溢位。
 
 ```sh
-npm run check     # 語法 + 40 個 domain tests
-npm run build     # 單檔離線產物
-# UI 測試需 Python、Playwright 與 Chromium（不是應用程式的執行依賴）
+npm run check
+npm run build
+# 瀏覽器測試另外需要 Python、Playwright 與 Chromium。
 python -m pip install playwright
 python -m playwright install chromium
-CHROMIUM_PATH=/path/to/chromium python tests/smoke.py
-CHROMIUM_PATH=/path/to/chromium python tests/flows.py
-CHROMIUM_PATH=/path/to/chromium python tests/rating.py
+CHROMIUM_PATH=/path/to/chromium python tests/discovery.py
+# 其他回歸：tests/flows.py、guide.py、rating.py、energy-board.py、smoke.py
 ```
 
-初版驗證結果：**40 個 domain tests、27 個 UI 檢查、5 種寬度 × 7 關卡的版面檢查通過**。UI 測試直接載入建置後的單檔 HTML，使用 deterministic Storage shim，驗證序列化、重載、配額錯誤與衝突邏輯；不是原生瀏覽器儲存可靠性的證明。
+瀏覽器測試使用精確單檔產物、Chromium 與明確的 Storage 測試替身；觸控為 CDP 模擬。**不是原生 HTTP 儲存、真實手機或 Safari 驗證。** 本機 HTTP 導航受到環境政策限制，未繞過。GitHub Pages 部署成功也不等於上述實機驗收完成。
 
-測試環境限制、手動驗收與尚未完成的項目見 [docs/TESTING.md](docs/TESTING.md)。規則規格見 [openspec/specs/year-journey/spec.md](openspec/specs/year-journey/spec.md)；這份規格採 Requirement／Scenario 格式，未宣稱跑過 OpenSpec CLI 驗證。
+分類規則、資料相容與測試邊界見 [docs/DISCOVERY.md](docs/DISCOVERY.md)。較早的 `docs/GUIDE.md`、`docs/TESTING.md`、`docs/ENERGY-BOARD.md` 與 OpenSpec 文件保留歷史設計；衝突時以本版分類規則為準。
 
-### 架構
+## 架構
 
-- `src/domain.mjs`：純資料規則、白名單匯入、時間週期、資源計算與關聯刪除。
-- `src/app.mjs`：七個關卡、原生 dialog、儲存衝突处理與 JSON／SVG 匯出。
-- `src/styles.css`：響應式版面、觸控與鍵盤樣式、減少動態效果與列印樣式。
-- `scripts/build.mjs`：把本地模組與 CSS 內嵌為單一 HTML，無 CDN。
+`src/domain.mjs`：v1→v2 讀取、白名單驗證與計畫規則。`src/discovery-model.mjs`：分類資料操作。`src/discovery.mjs`：二分類、分群、引導及方向銜接。`src/month-order.mjs`：月內排序。`src/guide.mjs`：隔離示範。`src/app.mjs`：頁面、對話框、儲存與匯出。`scripts/build.mjs`：保留模組作用域的單檔建置。
 
-採原生 ES modules、CSS 與 SVG，沒有 React／AntV runtime 依賴。AntV Infographic 是資訊图設計參考，**本版沒有宣稱已整合 AntV**；後續如需更多摘要模板，可以用 adapter 替換摘要 renderer，而不改資料模型。
-
-## 方法與設計來源
-
-[ICA：ORID 對話與年度規劃](https://ica-associates.ca/news/orid-as-an-underlying-structure-for-effective-meeting-design/) · [Performance Consultants：GROW](https://www.performanceconsultants.com/resources/the-grow-model/) · [AntV Infographic](https://github.com/antvis/Infographic)
-
-這是自行設計的反思與規劃遊戲，不代表上述機構的授權、認證或背書，也不是心理治療或已獲臨床驗證的介入。可以跳過、停止、不分享，不要求低谷都產生收穫。
+參考 [ORID](https://ica-associates.ca/news/orid-as-an-underlying-structure-for-effective-meeting-design/)、[GROW](https://www.performanceconsultants.com/resources/the-grow-model/) 與 [AntV Infographic](https://github.com/antvis/Infographic)。本版使用原生 SVG，沒有整合 AntV SDK。這是自行設計的回顧工具，不代表機構背書，不是心理治療或心理評量。

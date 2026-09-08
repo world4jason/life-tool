@@ -1,21 +1,25 @@
 import { readFile, mkdir, writeFile } from 'node:fs/promises';
-const html = await readFile('index.html', 'utf8');
-const css = await readFile('src/styles.css', 'utf8');
-const eventCSS = await readFile('src/event-editor.css', 'utf8');
-const energyCSS = await readFile('src/energy-board.css', 'utf8');
-const ordering = (await readFile('src/month-order.mjs', 'utf8')).replace(/^export /gm, '');
-const guideCSS = await readFile('src/guide.css', 'utf8');
-const guide = (await readFile('src/guide.mjs', 'utf8')).replace(/^import .*?;\n/gm, '').replace(/^export /gm, '');
-const domain = (await readFile('src/domain.mjs', 'utf8')).replace(/^export /gm, '');
-const app = (await readFile('src/app.mjs', 'utf8')).replace(/^import \{[\s\S]*?\} from '\.\/domain\.mjs';\n/, '').replace(/^import .*?;\n/gm, '');
-// The distributable has no imports/CDN/fonts/analytics and also opens as a local file.
-const safe = text => text.replace(/<\/script/gi, '<\\/script');
-const output = html.replace('<link rel="stylesheet" href="./src/styles.css">', () => `<style>${css}</style>`)
-  .replace('<link rel="stylesheet" href="./src/event-editor.css?v=rating-1">', () => `<style>${eventCSS}</style>`)
-  .replace('<link rel="stylesheet" href="./src/guide.css?v=guide-1">', () => `<style>${guideCSS}</style>`)
-  .replace('<link rel="stylesheet" href="./src/energy-board.css?v=energy-2">', () => `<style>${energyCSS}</style>`)
-  .replace('<script type="module" src="./src/app.mjs?v=energy-2"></script>', () => `<script type="module">\n${safe(domain)}\n${safe(ordering)}\n${safe(guide)}\n${safe(app)}\n</script>`);
+let html = await readFile('index.html', 'utf8');
+for (const match of [...html.matchAll(/<link rel="stylesheet" href="(\.\/src\/[^"?]+)(?:\?[^\"]*)?">/g)]) {
+  const css = await readFile(match[1], 'utf8');
+  html = html.replace(match[0], () => `<style>${css}</style>`);
+}
+// Each source module retains its own scope. Export destructuring replaces only
+// static local imports; the offline build makes no network requests.
+const modules = ['domain', 'month-order', 'guide', 'discovery-model', 'discovery', 'app'];
+let bundle = '';
+for (const name of modules) {
+  const code = await readFile(`src/${name}.mjs`, 'utf8');
+  const exports = [...code.matchAll(/^export (?:function|const|class) (\w+)/gm)].map(m => m[1]);
+  const transformed = code.replace(/^import\s+\{([\s\S]*?)\}\s+from\s+'\.\/([^'?]+)\.mjs(?:\?[^']*)?';\n/gm,
+    (_, imported, dependency) => `const {${imported}} = __modules[${JSON.stringify(dependency)}];\n`).replace(/^export /gm, '');
+  bundle += `__modules[${JSON.stringify(name)}] = (() => {\n${transformed}\nreturn {${exports.join(',')}};\n})();\n`;
+}
+const safe = value => value.replace(/<\/script/gi, '<\\/script');
+html = html.replace(/<script type="module" src="\.\/src\/app\.mjs[^\"]*"><\/script>/,
+  () => `<script type="module">\nconst __modules = {};\n${safe(bundle)}\n</script>`);
+if (/<(?:script[^>]+src|link[^>]+stylesheet)/.test(html)) throw new Error('Unbundled runtime resource');
 await mkdir('dist', { recursive: true });
-await writeFile('dist/index.html', output);
+await writeFile('dist/index.html', html);
 await writeFile('dist/.nojekyll', '');
-console.log(`Built dist/index.html (${Buffer.byteLength(output).toLocaleString()} bytes), zero runtime dependencies.`);
+console.log(`Built dist/index.html (${Buffer.byteLength(html).toLocaleString()} bytes), no external runtime resources.`);

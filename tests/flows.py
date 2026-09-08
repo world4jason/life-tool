@@ -40,10 +40,16 @@ def run():
     p.locator('[name="unrated"]').uncheck();p.locator('[name="energy"]').fill('7');save(p)
     check('energy and private marker saved',stored(p)['events'][0]['energy']==7 and stored(p)['events'][0]['private'])
     check('private title masked by default','<img src=x' not in p.locator('#app').inner_text())
-    # bottom-up event grouping
+    # Bottom-up grouping uses the board; direction is a separate next-step choice.
     step(p,3)
-    for e in stored(p)['events'][:2]: p.locator(f'[data-event-select="{e["id"]}"]').check()
-    action(p,'group-events');fill(p,'label','我需要連結');fill(p,'value','連結');fill(p,'alternate','也可能是想休息');fill(p,'intention','以不耗損的方式與人相處');save(p)
+    p.locator('[data-action="d-mode"][data-mode="group"]').click()
+    for e in stored(p)['events'][:2]: p.locator(f'[data-discovery-select="{e["id"]}"]').check()
+    action(p,'d-group-selected')
+    p.locator('[data-discovery-form="name"] input').fill('我需要連結')
+    p.locator('[data-discovery-form="name"] button').click()
+    action(p,'d-options')
+    p.locator('#discovery-direction-input').fill('以不耗損的方式與人相處')
+    p.locator('[data-discovery-form="direction"] button[type="submit"]').click()
     check('grouping retains two event relations',len(stored(p)['themes'][0]['eventIds'])==2)
     # options: qualitatively different routes + real costs
     step(p,4)
