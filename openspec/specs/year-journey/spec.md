@@ -80,3 +80,33 @@ The system SHALL separate fictional-demo and personal storage. It SHALL NOT uplo
 
 ### Requirement: Touch and keyboard alternatives
 The system SHALL provide non-drag interaction for every core task, native labeled dialogs, visible keyboard focus, reduced-motion support, and responsive desktop/mobile layouts with horizontal scrolling confined to the timeline where necessary.
+
+
+## Requirement: Focused rating dialog
+
+The reflective chapter SHALL open existing events in a score-first dialog with read-only fact metadata. Only monthly order MAY be edited within the fact summary. New events SHALL retain the full fact editor. Rating saves SHALL preserve omitted metadata, including origin and privacy.
+
+### Scenario: Rate an existing event without rewriting its facts
+- GIVEN an existing event with fact text and a selected origin
+- WHEN opened from the reflective chapter
+- THEN the score and enabled slider are visible without initial scrolling at supported viewports
+- AND the month, title, facts, origin and privacy are shown as static content, not editable inputs
+- AND saving changes only the chosen reflective fields and optional monthly order
+
+### Scenario: Distinguish unrated from zero
+- GIVEN an unrated event
+- WHEN the rating dialog is opened and saved without score interaction
+- THEN its energy remains null
+- WHEN the slider is moved or the user explicitly chooses zero
+- THEN the score readout and persisted value reflect that choice
+- AND opting out restores null without preventing later slider use
+
+## Requirement: Single-choice origin tags
+
+The fact editor SHALL present the existing origin enum as four native radio tags, with keyboard navigation and visible selected/focus states. Rating summaries SHALL show only the selected origin as a static tag. No schema migration is required.
+
+### Scenario: Select an origin by keyboard or touch
+- GIVEN the event fact editor
+- WHEN a player selects planned, surprise, mixed or unsure
+- THEN exactly one origin remains selected and is saved using its existing enum value
+- AND each tag has a touch target at least 44 CSS px high

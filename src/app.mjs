@@ -331,9 +331,10 @@ function selectField(label, name, value, choices, help = '') {
 function checkField(label, name, checked = false, value = 'yes') {
   return `<label class="check-field"><input type="checkbox" name="${name}" value="${attr(value)}" ${checked ? 'checked' : ''}><span>${label}</span></label>`;
 }
-function openDialog(title, subtitle, content, formType = '', entityId = '', footer = '') {
+function openDialog(title, subtitle, content, formType = '', entityId = '', footer = '', mode = '') {
   const dlg = $('#editor'); if (dlg.open) dlg.close();
   previousFocus = document.activeElement;
+  dlg.dataset.mode = mode;
   dialogContext = { type: formType, id: entityId };
   dlg.innerHTML = `<div class="dialog-heading"><div><span class="eyebrow">LIFE ATLAS · YOUR SPACE</span><h2 id="dialog-title">${title}</h2><p>${subtitle}</p></div>${button(icon('close'), 'close-dialog', 'icon-button', 'aria-label="關閉對話框"')}</div>
     <form id="editor-form" data-form="${formType}"><div class="dialog-body"><p id="form-error" class="form-error" role="alert" tabindex="-1" hidden></p>${content}</div>
@@ -348,26 +349,60 @@ function closeDialog() {
 function confirmDialog(title, body, action) {
   confirmAction = action; openDialog(title, '這個決定由你來做。', `<div class="confirm-body">${body}</div>`, 'confirm');
 }
+// Origins remain single-choice data, rendered as keyboard-accessible tags.
+function originTags(value) {
+  return `<fieldset class="choice-fieldset origin-fieldset"><legend>這件事怎麼發生？</legend><div class="origin-choices">${Object.entries(ORIGINS).map(([key, label]) => `<label class="origin-choice"><input type="radio" name="origin" value="${attr(key)}" ${value === key ? 'checked' : ''}><span>${icon('check')}${esc(label)}</span></label>`).join('')}</div></fieldset>`;
+}
+function energyValue(value) { return value === null ? '—' : value > 0 ? `+${value}` : String(value); }
+function energyMeaning(value) { return value === null ? '尚未評分' : value > 0 ? '較充電' : value < 0 ? '較耗損' : '沒有明顯偏向'; }
+function syncEnergyControl(markRated = false) {
+  const slider = $('#editor input[name="energy"]'), unrated = $('#editor input[name="unrated"]');
+  if (!slider || !unrated) return;
+  if (markRated) unrated.checked = false;
+  const value = unrated.checked ? null : number(slider.value);
+  $('#energy-output').textContent = energyValue(value);
+  $('#energy-meaning').textContent = energyMeaning(value);
+  $('#editor .energy-score-panel').dataset.score = value === null ? 'unrated' : value < 0 ? 'negative' : 'rated';
+  slider.setAttribute('aria-valuetext', value === null ? '尚未評分；移動滑桿或選擇記為 0 分' : `${energyValue(value)} 分，${energyMeaning(value)}`);
+}
+function ratingSummary(e) {
+  const hidden = e.private && ui.hidePrivate;
+  const facts = hidden ? '' : e.facts;
+  return `<section class="rating-summary" aria-label="片刻摘要（唯讀）">
+    <div class="rating-summary-top"><div class="rating-summary-copy"><div class="rating-meta"><span class="eyebrow">${e.kind === 'background' ? '日常背景' : `${e.month} 月`}</span><span class="chip origin-tag" aria-label="發生方式：${attr(ORIGINS[e.origin])}">${esc(ORIGINS[e.origin])}</span>${e.private ? chip(`${icon('lock')}私密卡`, 'privacy-tag') : ''}</div><h3 title="${attr(titleOf(e))}">${esc(titleOf(e))}</h3></div>
+    ${e.kind === 'event' ? `<div class="rating-order">${field('月內順序', 'order', e.order, { type: 'number', min: 1, max: 3, required: true, step: 1 })}</div>` : ''}</div>
+    ${hidden ? '<p class="rating-private-note">文字已遮蔽；可回探索桌切換顯示。</p>' : facts ? `<details class="rating-facts"><summary><span>${esc(facts)}</span><small>查看事實</small></summary><p>${esc(facts)}</p></details>` : '<p class="rating-empty-facts">沒有另外記下事實，也可以直接評分。</p>'}
+  </section>`;
+}
 function eventDialog(entityId = '', month = ui.month, kind = 'event') {
   const old = state.events.find(e => e.id === entityId);
   const e = old || newEvent(month, state.events, kind);
-  const facts = `<div class="form-grid">${field('月份', 'month', e.month, { type: 'number', min: 1, max: 12, required: true, step: 1 })}${field('月內順序', 'order', e.order, { type: 'number', min: 1, max: 3, required: true, step: 1, help: '只用來排列同月事件，不是重要性。' })}</div>
+  // Only existing cards in the reflective chapter have read-only facts.
+  // New cards still need the full editor, even when added from the energy view.
+  const ratingOnly = Boolean(old && ui.step === 2);
+  const facts = ratingOnly ? ratingSummary(e) : `<div class="form-grid">${field('月份', 'month', e.month, { type: 'number', min: 1, max: 12, required: true, step: 1 })}${field('月內順序', 'order', e.order, { type: 'number', min: 1, max: 3, required: true, step: 1, help: '只用來排列同月事件，不是重要性。' })}</div>
     ${field('片刻的名字', 'title', e.title, { required: true, max: 120, placeholder: '例如：和老朋友一起吃了一頓晚餐' })}
     ${textarea('發生了什麼？', 'facts', e.facts, '先記錄可觀察的事實，暫時不用下結論。也可以留白。')}
-    ${selectField('這件事怎麼發生？', 'origin', e.origin, ORIGINS)}
+    ${originTags(e.origin)}
     ${checkField('把這張標為私密卡（只遮蔽文字，不是加密）', 'private', e.private)}`;
-  const energy = `<section class="energy-form"><h3>充電，或耗損？</h3><p class="micro">${state.frame === 'then' ? '回想當時' : '現在回看'}，這件事讓你更有能量，還是更被耗損？</p>
-    ${checkField('這張卡暫時不評分', 'unrated', e.energy === null)}
-    <div class="energy-control"><span>−10<br><small>耗損</small></span><input type="range" name="energy" min="-10" max="10" step="1" value="${e.energy ?? 0}" aria-label="事件能量" ${e.energy === null ? 'disabled' : ''}><span>+10<br><small>充電</small></span><output id="energy-output">${e.energy === null ? '未評分' : e.energy > 0 ? '+' + e.energy : e.energy}</output></div>
+  const energy = `<section class="energy-form"><div class="energy-score-panel" data-score="${e.energy === null ? 'unrated' : e.energy < 0 ? 'negative' : 'rated'}">
+    <div class="energy-score-heading"><div><h3>充電，或耗損？</h3><p class="micro">${state.frame === 'then' ? '回想當時' : '現在回看'}，這件事帶給你的能量。</p></div><div class="energy-readout"><output id="energy-output" for="event-energy" aria-label="能量分數" aria-live="polite" aria-atomic="true">${energyValue(e.energy)}</output><span id="energy-meaning">${energyMeaning(e.energy)}</span></div></div>
+    <div class="energy-control"><span>−10<br><small>耗損</small></span><input id="event-energy" type="range" name="energy" min="-10" max="10" step="1" value="${e.energy ?? 0}" aria-label="事件能量" aria-describedby="energy-help"><span>+10<br><small>充電</small></span></div>
+    <div class="energy-choices">${checkField('暫時不評分', 'unrated', e.energy === null)}${button('記為 0 分', 'zero-energy', 'text-button')}</div>
+    <p id="energy-help" class="micro">移動滑桿即可評分；0 分與未評分不同。</p></div>
     <fieldset class="choice-fieldset"><legend>有哪些感受？可以同時選擇。</legend><div class="check-chips">${FEELINGS.map(f => checkField(esc(f), 'feelings', e.feelings.includes(f), f)).join('')}</div></fieldset>
     ${field('或用自己的情緒詞', 'customFeelings', e.feelings.filter(f => !FEELINGS.includes(f)).join('、'), { max: 400, help: '以「、」分隔；情緒詞總共最多 12 個。' })}
     ${selectField('我目前的回應空間', 'influence', e.influence, INFLUENCES, '意外不等於不可控；有計畫也不代表結果都要由自己負責。')}
     ${checkField('不論能量高低，這件事對我很重要', 'important', e.important)}</section>`;
-  openDialog(old ? '再看看這個片刻' : kind === 'background' ? '留下一張日常背景' : '拾起一個片刻', e.kind === 'background' ? '日常不占每月三張，不連入年度曲線。' : '每月 0–3 張；沒有事件的月份不用補成零。',
+  openDialog(ratingOnly ? '記錄這個片刻的能量' : old ? '再看看這個片刻' : kind === 'background' ? '留下一張日常背景' : '拾起一個片刻',
+    ratingOnly ? '事實先留在原處，這一刻只看看感受。' : e.kind === 'background' ? '日常不占每月三張，不連入年度曲線。' : '每月 0–3 張；沒有事件的月份不用補成零。',
     `${facts}${ui.step === 2 ? energy : `<details class="form-details"><summary>也想記錄感受？（可等下一回合）</summary>${energy}</details>`}`, 'event', e.id,
-    old ? button(`${icon('trash')}刪除`, 'delete-event', 'text-button danger', `data-id="${e.id}"`) : '');
+    old && !ratingOnly ? button(`${icon('trash')}刪除`, 'delete-event', 'text-button danger', `data-id="${e.id}"`) : '', ratingOnly ? 'rating' : '');
   dialogContext.entity = e;
+  dialogContext.ratingOnly = ratingOnly;
+  syncEnergyControl();
 }
+
 function themeDialog(entityId = '', word = '', chosen = []) {
   const t = state.themes.find(x => x.id === entityId) || { ...newTheme(state.themes.length), label: word, value: word, eventIds: chosen };
   const choices = `<fieldset class="choice-fieldset"><legend>哪些片刻支持這個理解？可連到多個主題。</legend><div class="event-checklist">${state.events.map(e => checkField(`${esc(titleOf(e))}<small>${e.kind === 'background' ? '日常背景' : e.month + ' 月'}</small>`, 'eventIds', t.eventIds.includes(e.id), e.id)).join('') || '<p class="muted">目前沒有事件；可以先記下一個詞。</p>'}</div></fieldset>`;
@@ -547,8 +582,11 @@ function submitForm(form) {
   if (ctx.type === 'confirm') { const fn = confirmAction; closeDialog(); confirmAction = null; fn?.(); return; }
   try {
     if (ctx.type === 'event') {
-      const e = { ...ctx.entity, month: number(get('month')), order: number(get('order')), title: get('title'), facts: get('facts'), origin: get('origin'),
-        private: has('private'), energy: has('unrated') ? null : number(get('energy')), influence: get('influence'), important: has('important'),
+      // A rating form deliberately omits fact inputs. Preserve the original
+      // metadata rather than replacing absent fields with blanks/defaults.
+      const facts = ctx.ratingOnly ? {} : { month: number(get('month')), title: get('title'), facts: get('facts'), origin: get('origin'), private: has('private') };
+      const e = { ...ctx.entity, ...facts, order: has('order') ? number(get('order')) : ctx.entity.order,
+        energy: has('unrated') ? null : number(get('energy')), influence: get('influence'), important: has('important'),
         feelings: [...new Set([...all('feelings'), ...get('customFeelings').split(/[、,，]/).map(x => x.trim()).filter(Boolean)])] };
       if (!e.title) throw new Error('請為這個片刻取一個名字，也可以只用代號。');
       success = commit(s => {
@@ -629,6 +667,7 @@ function handleAction(action, el) {
   if (action === 'add-event') return eventDialog('', number(el.dataset.month || ui.month));
   if (action === 'add-background') return eventDialog('', 1, 'background');
   if (action === 'edit-event') return eventDialog(id);
+  if (action === 'zero-energy') { const slider = $('#editor input[name="energy"]'); if (slider) { slider.value = '0'; syncEnergyControl(true); } return; }
   if (action === 'view-graph' || action === 'view-list') { ui.view = action === 'view-graph' ? 'graph' : 'list'; render(); return; }
   if (action === 'month') { ui.month = number(el.dataset.month); render(); return; }
   if (action === 'reflection') return reflectionDialog();
@@ -689,7 +728,7 @@ document.addEventListener('keydown', event => {
 document.addEventListener('submit', event => { if (event.target.id === 'editor-form') { event.preventDefault(); submitForm(event.target); } });
 document.addEventListener('input', event => {
   const el = event.target;
-  if (el.name === 'energy' && el.type === 'range') $('#energy-output').textContent = number(el.value) > 0 ? `+${el.value}` : el.value;
+  if (el.name === 'energy' && el.type === 'range') syncEnergyControl(true);
 });
 document.addEventListener('change', event => {
   const el = event.target;
@@ -698,7 +737,7 @@ document.addEventListener('change', event => {
   if (el.id === 'route-filter') { ui.routeTheme = el.value; render(); }
   if (el.id === 'stress-toggle') { ui.stress = el.checked; render(); }
   if (el.id === 'review-date') { if (el.value && el.value <= dateString()) { ui.reviewDate = el.value; render(); } }
-  if (el.name === 'unrated') { const slider = $('#editor input[name="energy"]'); slider.disabled = el.checked; $('#energy-output').textContent = el.checked ? '未評分' : slider.value; }
+  if (el.name === 'unrated') syncEnergyControl();
   if (el.name === 'mode') { const input = $('#editor input[name="amount"]'); input.disabled = ['missed', 'reflection'].includes(el.value); if (input.disabled) input.value = 0; }
   if (el.name === 'planType') {
     const cmp = $('#editor select[name="comparator"]'), agg = $('#editor select[name="aggregation"]'), period = $('#editor select[name="period"]');

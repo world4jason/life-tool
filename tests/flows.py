@@ -27,7 +27,7 @@ def run():
     b=pw.chromium.launch(executable_path=os.getenv('CHROMIUM_PATH','/usr/bin/chromium'),headless=True,args=['--no-sandbox'])
     p=mount(b); errors=[];p.on('pageerror',lambda e:errors.append(str(e)))
     # Actual interactions, no injected application state.
-    step(p,1);action(p,'add-event');fill(p,'title','<img src=x onerror=alert(1)>');fill(p,'facts','只有事實，先不評價');save(p)
+    step(p,1);action(p,'add-event');fill(p,'title','<img src=x onerror=alert(1)>');fill(p,'facts','只有事實，先不評價');p.locator('[name="private"]').check();save(p)
     s=stored(p); eid=s['events'][0]['id']
     check('facts saved without inventing zero energy',s['events'][0]['energy'] is None)
     check('user HTML displayed as text',p.locator('img').count()==0)
@@ -37,7 +37,7 @@ def run():
     action(p,'add-background');fill(p,'title','每週散步');save(p)
     check('daily background separate from monthly capacity',len(stored(p)['events'])==4)
     step(p,2);p.locator(f'[data-action="edit-event"][data-id="{eid}"]').first.click()
-    p.locator('[name="unrated"]').uncheck();p.locator('[name="energy"]').fill('7');p.locator('[name="private"]').check();save(p)
+    p.locator('[name="unrated"]').uncheck();p.locator('[name="energy"]').fill('7');save(p)
     check('energy and private marker saved',stored(p)['events'][0]['energy']==7 and stored(p)['events'][0]['private'])
     check('private title masked by default','<img src=x' not in p.locator('#app').inner_text())
     # bottom-up event grouping

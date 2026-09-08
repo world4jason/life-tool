@@ -44,6 +44,12 @@ node scripts/serve.mjs --dist
 | 帶走實驗 | 方向 O → 成果 KR → 行動，可多層拆解；也可先寫行動再向上聚類。區分習慣、體驗、成果、界線、固定流程，寫驗收、頻率、觸發條件、縮小版與備案。 |
 | 回來看看 | 完整執行、縮小版、未執行與純反思分開；同時追蹤執行量與方向感受。允許維持、調整、減量、暫停、停止。 |
 
+### 評分時專注感受
+
+「看見起伏」中的既有卡片會開啟評分專用視窗：分數與滑桿直接顯示，事件月份、名稱、事實、發生方式與私密狀態為唯讀摘要，只有月內順序能調整。長事實可展開查看；需要修改事件內容時，回到「拾起片刻」。新卡片仍使用完整編輯表單。
+
+發生方式改為「計畫內／意外／混合／不確定」單選標籤，評分摘要只顯示已選標籤。滑桿可直接操作，未評分不會自動變成零；「記為 0 分」是明確選擇，亦可選擇「暫時不評分」。
+
 ### 兩個 O，不混在一起
 
 **ORID 的 Objective** 放在回顧開頭：先記錄發生的事，暫緩詮釋。**GROW 的 Options** 放在主題與行動之間：比較不同路線，而不只是把同一個方法增加次數。比較後才選擇、寫理由與備案；可以保留未選路線，或記錄「先不比較／暫不新增目標」。系統不強迫湊出特定數量的目標。
@@ -70,6 +76,7 @@ python -m pip install playwright
 python -m playwright install chromium
 CHROMIUM_PATH=/path/to/chromium python tests/smoke.py
 CHROMIUM_PATH=/path/to/chromium python tests/flows.py
+CHROMIUM_PATH=/path/to/chromium python tests/rating.py
 ```
 
 初版驗證結果：**40 個 domain tests、27 個 UI 檢查、5 種寬度 × 7 關卡的版面檢查通過**。UI 測試直接載入建置後的單檔 HTML，使用 deterministic Storage shim，驗證序列化、重載、配額錯誤與衝突邏輯；不是原生瀏覽器儲存可靠性的證明。

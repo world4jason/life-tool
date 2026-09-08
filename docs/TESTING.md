@@ -7,6 +7,20 @@
 - `tests/smoke.py`：1440、1024、768、390、320 CSS px，七個關卡共 35 組；無頁面水平溢出、無捕捉到的執行期例外。時間軸本身允許受控的水平捲動。
 - `tests/flows.py`：27 項檢查通過，包括卡片 CRUD 入口、私密遮蔽、HTML 注入文字顯示、聚類、替代路線、資源壓力、上下雙向計畫、回顧狀態、匯入確認、原始資料保留、JSON／SVG、配額失敗與跨分頁衝突。
 
+## 評分視窗與發生方式標籤更新
+
+執行 `npm run check && npm run build`，再執行 `python tests/flows.py`、`python tests/smoke.py` 與 `python tests/rating.py`。
+
+此次驗證：40 個 domain tests、27 個原有流程檢查、35 組章節版面檢查，以及 **42 個新增評分／標籤檢查**通過。新增檢查包含：
+
+- 評分時事實唯讀，只開放月內順序；儲存保留月份、名稱、事實、發生方式與私密設定；順序重疊時交換位置。
+- 原生 radio 標籤支援單選與鍵盤；小螢幕觸控高度至少 44px；預設「不確定」及原有資料值不變。
+- 未評分滑桿可直接操作；即時更新正負分數，並區別未評分與明確 0 分。取消不寫入，重新開啟顯示既有分數。
+- 1440×960、1024×768、768×1024、390×844、375×667、320×568 六種 viewport，首次開啟時分數和滑桿都在可視範圍，無水平溢出。長名稱／多行事實另在 320×568 檢查。
+- 私密摘要遮蔽、完整事實展開與 HTML escaping、新事件仍可編輯事實、背景卡不出現無關的月內排序欄位。
+
+`test-results/rating-checks.json`、`rating-desktop.png`、`rating-mobile.png` 為本機產物，不提交使用者資料。這些仍是 Chromium + Storage shim 測試，不等於真實手機／Safari 或正式 Pages 的操作驗收。
+
 ## 測試環境的限制
 
 提供的執行環境禁止 Chromium 透過 HTTP/file URL 導航。沒有更改或規避該政策；測試採用 Playwright `set_content()` 載入本地建置產物，搭配明確的 in-memory Storage shim。匯出測試驗證產生的 Blob bytes 與 SVG XML，不依賴外部下載。
