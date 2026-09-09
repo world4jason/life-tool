@@ -6,7 +6,7 @@ for (const match of [...html.matchAll(/<link rel="stylesheet" href="(\.\/src\/[^
 }
 // Each source module retains its own scope. Export destructuring replaces only
 // static local imports; the offline build makes no network requests.
-const modules = ['domain', 'month-order', 'guide', 'discovery-model', 'canvas-model', 'canvas', 'discovery', 'app'];
+const modules = ['domain', 'complete-example', 'example-view', 'month-order', 'guide', 'discovery-model', 'canvas-model', 'canvas', 'discovery', 'app'];
 let bundle = '';
 for (const name of modules) {
   const code = await readFile(`src/${name}.mjs`, 'utf8');

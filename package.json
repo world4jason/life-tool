@@ -1,6 +1,6 @@
 {
   "name": "life-tool",
-  "version": "0.4.0",
+  "version": "0.5.0",
   "private": true,
   "type": "module",
   "description": "A local-first, responsive annual reflection and life experiment game.",
@@ -12,6 +12,6 @@
     "start": "node scripts/serve.mjs",
     "test": "node --test tests/*.test.mjs",
     "build": "node scripts/build.mjs",
-    "check": "node --check src/domain.mjs && node --check src/app.mjs && node --check src/discovery.mjs && node --check src/discovery-model.mjs && node --check src/canvas.mjs && node --check src/canvas-model.mjs && node --test tests/*.test.mjs"
+    "check": "node --check src/domain.mjs && node --check src/app.mjs && node --check src/discovery.mjs && node --check src/discovery-model.mjs && node --check src/canvas.mjs && node --check src/canvas-model.mjs && node --check src/complete-example.mjs && node --check src/example-view.mjs && node --test tests/*.test.mjs"
   }
 }

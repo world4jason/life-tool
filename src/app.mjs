@@ -7,6 +7,8 @@ import {
 import { GUIDE_STEPS, createGuideState, prepareGuideStep } from './guide.mjs?v=discovery-3';
 import { reorderMonthlyEvents, installMonthOrdering } from './month-order.mjs';
 import { createDiscovery } from './discovery.mjs?v=discovery-3';
+import { EXAMPLE, createCompleteExample } from './complete-example.mjs?v=example-5';
+import { createExampleView } from './example-view.mjs?v=example-5';
 
 const $ = selector => document.querySelector(selector);
 const esc = value => String(value ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
@@ -67,6 +69,8 @@ let key = `life-atlas.v1.${demo ? 'demo' : 'personal'}`;
 let state, lastRaw = null, unsaved = false, conflict = false, recovery = '', storeWarning = '';
 const ui = { step: 0, month: 1, view: 'graph', hidePrivate: true, themeMode: 'cards', eventSelection: new Set(), actionSelection: new Set(), routeTheme: '', stress: false, prompt: 0, reviewDate: dateString() };
 let training = null;
+const completeExample = createExampleView({ esc, button, icon });
+const isCompleteExample = () => training?.kind === 'example';
 let dialogContext = {}, previousFocus = null, pendingImport = null, confirmAction = null;
 
 function load() {
@@ -126,16 +130,16 @@ function shell(content) {
   return `<aside class="sidebar">
     <a href="#" class="brand" data-action="home" aria-label="拾光，回到開始"><span class="brand-mark">${icon('wave')}</span><span><strong>拾光</strong><small>LIFE ATLAS</small></span></a>
     <nav class="steps" aria-label="探索章節">${STEPS.map(([ic, name], i) => `<button class="step ${ui.step === i ? 'active' : ''}" data-action="go" data-step="${i}" ${ui.step === i ? 'aria-current="step"' : ''}>
-      <span class="step-symbol">${icon(ic)}</span><span>${name}</span>${i && counts[i - 1] ? `<span class="step-count">${counts[i - 1]}</span>` : ''}</button>`).join('')}</nav>
+      <span class="step-symbol">${icon(ic)}</span><span>${i === 0 && isCompleteExample() ? '案例總覽' : name}</span>${i && counts[i - 1] ? `<span class="step-count">${counts[i - 1]}</span>` : ''}</button>`).join('')}</nav>
     <div class="local-note">${icon('lock')}<span>資料留在這台裝置</span></div>
   </aside>
-  <div class="workspace">
-    <header class="topbar"><div class="breadcrumb"><span>${training ? '示範' : '我的回顧'}</span><span>/</span>${training ? `<span>${state.year}</span>` : `<button class="year-button" data-action="settings">${state.year}${icon('settings')}</button>`}${demo && !training ? chip('虛構示範', 'gold') : ''}</div>
-      <div class="top-actions"><span class="save-status ${unsaved ? 'warning' : ''}"><i></i>${training ? '練習不儲存' : unsaved ? '尚未儲存' : lastRaw ? '已存於本機' : '準備開始'}</span>
+  <div class="workspace ${isCompleteExample() ? 'case-session' : ''}">
+    <header class="topbar"><div class="breadcrumb"><span>${isCompleteExample() ? '完整範例' : training ? '示範' : '我的回顧'}</span><span>/</span>${training ? `<span>${state.year}</span>` : `<button class="year-button" data-action="settings">${state.year}${icon('settings')}</button>`}${demo && !training ? chip('虛構示範', 'gold') : ''}</div>
+      <div class="top-actions"><span class="save-status ${unsaved ? 'warning' : ''}"><i></i>${isCompleteExample() ? '試改不儲存' : training ? '練習不儲存' : unsaved ? '尚未儲存' : lastRaw ? '已存於本機' : '準備開始'}</span>
       ${button(icon(ui.hidePrivate ? 'lock' : 'eye'), 'privacy', 'icon-button', `aria-label="${ui.hidePrivate ? '顯示私密卡文字' : '隱藏私密卡文字'}" title="${ui.hidePrivate ? '私密卡已遮蔽' : '私密卡已顯示'}"`)}
-      ${button(training ? '離開示範' : '操作引導', training ? 'guide-exit' : 'start-guide', 'button quiet small')}${!training ? button(`${icon('download')}<span>備份</span>`, 'data', 'button quiet small') : ''}</div>
+      ${button(isCompleteExample() ? '離開範例' : training ? '離開示範' : '操作引導', training ? 'guide-exit' : 'start-guide', 'button quiet small')}${!training ? button(`${icon('download')}<span>備份</span>`, 'data', 'button quiet small') : ''}</div>
     </header>
-    ${training ? `<div class="demo-banner"><span>虛構資料，不影響你的紀錄。</span></div>` : demo ? `<div class="demo-banner"><span>虛構示範</span>${button('回到我的回顧', 'switch-personal', 'text-button')}</div>` : ''}
+    ${training ? `<div class="demo-banner"><span>${isCompleteExample() ? '虛構案例・2025 年回顧 → 2026/1/5–1/18 實驗。試改不影響你的紀錄。' : '虛構資料，不影響你的紀錄。'}</span></div>` : demo ? `<div class="demo-banner"><span>虛構示範</span>${button('回到我的回顧', 'switch-personal', 'text-button')}</div>` : ''}
     ${storeWarning ? `<div class="warning-banner" role="alert"><span>${esc(storeWarning)}</span>${conflict ? button('載入另一分頁版本', 'reload-storage', 'button small') : ''}</div>` : ''}
     <main id="main" tabindex="-1">${recovery ? recoveryView() : guideBar() + content}</main>
     <footer class="footer"><span>拾光 Life Atlas</span>${button('資料與隱私', 'about', 'text-button')}</footer>
@@ -148,11 +152,12 @@ function chapterFooter(next, label) {
   return training ? '' : `<div class="chapter-footer">${button(`${label}${icon('arrow')}`, 'go', 'button primary', `data-step="${next}"`)}</div>`;
 }
 function homeView() {
+  if (isCompleteExample()) return completeExample.overview(state);
   const eventCount = state.events.filter(e => e.kind === 'event').length;
   return `<section class="hero">
     <div class="hero-copy"><h1 id="page-title" tabindex="-1">回顧這一年，<br><span>決定下一步。</span></h1>
     <p>記下事件，找出在乎的事，再試一個行動。</p>
-    <div class="hero-buttons">${button(`跟著示範做${icon('arrow')}`, 'start-guide', 'button primary large')}${button(training ? '離開示範' : eventCount ? '繼續我的回顧' : '開始我的回顧', training ? 'guide-exit' : 'go', 'button quiet large', 'data-step="1"')}</div>
+    <div class="hero-buttons">${button(`看完整範例${icon('arrow')}`, 'start-example', 'button primary large')}${button('跟著示範做', 'start-guide', 'button quiet large')}${button(training ? '離開示範' : eventCount ? '繼續我的回顧' : '開始我的回顧', training ? 'guide-exit' : 'go', 'button quiet large', 'data-step="1"')}</div>
     <div class="hero-note">${icon('lock')}不用登入，資料存在本機。</div></div>
     <div class="hero-art" aria-label="把生活片刻連成一條有高有低的年度曲線">
       <div class="art-label"><span>示範</span><span>${state.year}</span></div>
@@ -304,6 +309,7 @@ function recoveryView() {
   return `<section class="recovery panel"><h1>先保護原本的紀錄。</h1><p>本機資料無法通過格式檢查：${esc(recovery)}</p><p>原始內容仍保留，沒有用空白資料覆蓋。先下載原始檔，再選擇匯入可用備份或重新開始。</p><div class="inline">${button('下載原始資料', 'raw-backup', 'button primary')}${button('匯入備份', 'import', 'button quiet')}${button('重新開始', 'reset', 'button quiet')}</div></section>`;
 }
 function guideBar() {
+  if (isCompleteExample()) return completeExample.bar(ui.step, state);
   if (!training || ui.step === 3) return '';
   if (!ui.step) return '';
   const g = GUIDE_STEPS[ui.step - 1], done = training.done.has(ui.step);
@@ -311,22 +317,37 @@ function guideBar() {
   return `<section class="guide-bar" aria-label="操作引導"><div class="guide-progress"><span aria-label="第 ${ui.step} 步，共 6 步">${ui.step} / 6</span><div>${GUIDE_STEPS.map((_, i) => `<button type="button" class="guide-dot ${i + 1 === ui.step ? 'current' : ''}" data-action="go" data-step="${i + 1}" aria-label="示範第 ${i + 1} 步：${STEPS[i + 1][1]}" ${i + 1 === ui.step ? 'aria-current="step"' : ''}></button>`).join('')}</div></div><p class="guide-instruction" tabindex="-1">${esc(customDirection ? '為選定的方向寫出不同做法，比較資源和代價。' : g.text)}</p><div class="guide-actions">${button(customDirection ? '新增做法' : g.action, 'guide-task', 'button primary small')}<span class="guide-result" role="status">${done ? '已練習' : '可直接看下一步'}</span><div class="spacer"></div>${ui.step > 1 ? button('上一步', 'guide-back', 'text-button') : ''}${button(ui.step === 6 ? '結束示範' : '下一步', 'guide-next', 'button quiet small')}</div></section>`;
 }
 function highlightGuideTarget() {
-  if (!training || !ui.step) return;
+  if (!training || isCompleteExample() || !ui.step) return;
   const ids = ['demo-event-5', 'demo-event-5', 'demo-space', 'demo-route-1', 'guide-action', 'guide-action'];
   const target = $(`#main article [data-id="${ids[ui.step - 1]}"]`) || $(`#main [data-id="${ids[ui.step - 1]}"]`);
   const card = target?.closest('article, .month-cell') || target;
   card?.classList.add('guide-target');
 }
-function startGuide() {
+// Examples and practice share a disposable transaction boundary, never personal storage.
+function startGuide() { return startSession('guide'); }
+function startExample(step = 0) { return startSession('example', step); }
+function startSession(kind, step = 1) {
   if ($('#editor').open) closeDialog();
-  if (training) return go(1);
-  const returnTo = { state, demo, key, lastRaw, unsaved, conflict, recovery, storeWarning,
+  if (training?.kind === kind) return go(kind === 'example' ? step : 1);
+  const returnTo = training?.returnTo || { state, demo, key, lastRaw, unsaved, conflict, recovery, storeWarning,
     ui: { ...ui, eventSelection: new Set(ui.eventSelection), actionSelection: new Set(ui.actionSelection) }, discovery: discovery.snapshot() };
-  training = { returnTo, done: new Set(), routeId: '' };
+  training = { kind, returnTo, done: new Set(), routeId: '' };
+  try { const url = new URL(location.href); url.searchParams.delete('guide'); url.searchParams.delete('example'); url.searchParams.delete('step'); url.searchParams.delete('method'); url.searchParams.set(kind === 'example' ? 'example' : 'guide', '1'); history.replaceState({}, '', url); } catch { /* Local file / embedded preview. */ }
   discovery.reset();
-  state = createGuideState(); demo = true; lastRaw = null; unsaved = false; conflict = false; recovery = ''; storeWarning = '';
-  ui.eventSelection.clear(); ui.actionSelection.clear(); ui.routeTheme = ''; ui.view = 'graph'; ui.month = 6; ui.stress = false;
-  go(1);
+  state = kind === 'example' ? createCompleteExample() : createGuideState();
+  demo = true; lastRaw = null; unsaved = false; conflict = false; recovery = ''; storeWarning = '';
+  ui.eventSelection.clear(); ui.actionSelection.clear(); ui.routeTheme = kind === 'example' ? 'case-freedom' : '';
+  ui.view = 'graph'; ui.month = 6; ui.stress = false; ui.hidePrivate = true;
+  ui.reviewDate = kind === 'example' ? EXAMPLE.review : dateString();
+  go(kind === 'example' ? step : 1);
+}
+function resetExample() {
+  if (!isCompleteExample()) return;
+  confirmDialog('還原範例', '<p>只清除本次對虛構案例的試改；個人紀錄不變。</p>', () => {
+    state = createCompleteExample(); discovery.reset(); ui.reviewDate = EXAMPLE.review;
+    ui.routeTheme = 'case-freedom'; ui.eventSelection.clear(); ui.actionSelection.clear(); ui.stress = false;
+    render();
+  });
 }
 function exitGuide(beginPersonal = false) {
   if (!training) return;
@@ -339,7 +360,7 @@ function exitGuide(beginPersonal = false) {
   // A second tab may have changed the saved workspace while the example was open.
   try { if (localStorage.getItem(key) !== lastRaw) conflict = true; } catch { /* Preserve the original storage warning. */ }
   if (conflict) storeWarning = '另一個分頁更新了資料。本頁暫停儲存，請先下載備份，再載入最新版本。';
-  try { const url = new URL(location.href); url.searchParams.delete('guide'); history.replaceState({}, '', url); } catch { /* file: context */ }
+  try { const url = new URL(location.href); url.searchParams.delete('guide'); url.searchParams.delete('example'); url.searchParams.delete('step'); url.searchParams.delete('method'); history.replaceState({}, '', url); } catch { /* file: context */ }
   if (beginPersonal && demo && !unsaved) { switchWorkspace(false); go(1); }
   else go(beginPersonal && !recovery ? 1 : ui.step);
 }
@@ -347,7 +368,7 @@ function finishGuide() {
   openDialog('示範結束', '', `<p>回到自己的紀錄，從一件事開始。</p>${button('開始我的回顧', 'guide-finish', 'button primary')}${button('繼續試玩', 'close-dialog', 'button quiet')}`);
 }
 function runGuideTask() {
-  if (!training || !ui.step) return;
+  if (!training || isCompleteExample() || !ui.step) return;
   const g = GUIDE_STEPS[ui.step - 1];
   state = prepareGuideStep(state, ui.step, training.routeId);
   if (g.form === 'event') {
@@ -382,7 +403,7 @@ function render() {
 }
 function go(step) {
   ui.step = Math.max(0, Math.min(6, number(step)));
-  if (training) state = prepareGuideStep(state, ui.step, training.routeId);
+  if (training && !isCompleteExample()) state = prepareGuideStep(state, ui.step, training.routeId);
   render();
   window.scrollTo({ top: 0, behavior: 'instant' });
   $('#page-title')?.focus({ preventScroll: true });
@@ -529,7 +550,7 @@ function nodeDialog(entityId = '', type = 'action', parentId = '', preset = null
 }
 function reviewDialog(nodeId, reviewId = '') {
   const n = state.nodes.find(x => x.id === nodeId); if (!n) return;
-  const r = state.reviews.find(x => x.id === reviewId) || { id: uid(), nodeId, date: dateString(), amount: 1, mode: 'full', direction: 'unsure', note: '', decision: 'keep' };
+  const r = state.reviews.find(x => x.id === reviewId) || { id: uid(), nodeId, date: isCompleteExample() ? ui.reviewDate : dateString(), amount: 1, mode: 'full', direction: 'unsure', note: '', decision: 'keep' };
   openDialog('記錄回顧', esc(n.title),
     `<div class="form-grid">${field('紀錄日期', 'date', r.date, { type: 'date', required: true })}${selectField('這次的執行', 'mode', r.mode, { full: '完整執行／實際讀值', minimum: '只做了縮小版本', missed: '未執行', reflection: '不記數量，只記反思' })}</div>
     ${field(n.aggregation === 'latest' ? `本次讀值（${esc(n.unit)}）` : `這次實際新增的量（${esc(n.unit)}）`, 'amount', r.amount, { type: 'number', min: 0, max: 100000000, step: 0.1, required: true, help: '不要重複記錄同一次執行；誤記可以編輯或刪除。未執行／純反思一律記 0。' })}
@@ -699,17 +720,21 @@ function submitForm(form) {
       if (success) { pendingImport = null; discovery.reset(); ui.eventSelection.clear(); ui.actionSelection.clear(); ui.routeTheme = ''; }
     }
     if (success) {
-      if (training && GUIDE_STEPS[ui.step - 1]?.form === ctx.type) {
+      if (training && !isCompleteExample() && GUIDE_STEPS[ui.step - 1]?.form === ctx.type) {
         training.done.add(ui.step);
         if (ctx.type === 'choice') training.routeId = ctx.id;
       }
       closeDialog(); if (ctx.type === 'node' && ui.step === 4) go(5); else render();
-      if (training) { $('.guide-instruction')?.focus({ preventScroll: true }); $('.guide-bar')?.scrollIntoView({ block: 'start', behavior: 'instant' }); } }
+      if (training && !isCompleteExample()) { $('.guide-instruction')?.focus({ preventScroll: true }); $('.guide-bar')?.scrollIntoView({ block: 'start', behavior: 'instant' }); } }
   } catch (error) { showFormError(error.message); }
 }
 function handleAction(action, el) {
   const id = el.dataset.id || '';
   if (action.startsWith('d-')) return discovery.action(action, el);
+  if (action === 'start-example') return startExample();
+  if (action === 'example-reset') return resetExample();
+  if (action === 'example-export' && isCompleteExample()) return download(JSON.stringify(state, null, 2), 'life-atlas-fictional-example.json', 'application/json');
+  if (action === 'example-week' && isCompleteExample()) { ui.reviewDate = [EXAMPLE.review, EXAMPLE.firstReview].includes(el.dataset.date) ? el.dataset.date : EXAMPLE.review; render(); return; }
   if (action === 'start-guide' || action === 'switch-demo') return startGuide();
   if (action === 'guide-exit') return exitGuide();
   if (action === 'guide-finish') return exitGuide(true);
@@ -836,11 +861,15 @@ window.addEventListener('storage', event => {
   }
 });
 window.addEventListener('beforeunload', event => { if (unsaved || training?.returnTo.unsaved || discovery.hasDrafts()) { event.preventDefault(); event.returnValue = ''; } });
-if (new URLSearchParams(location.search).get('guide') === '1') {
+const entryParams = new URLSearchParams(location.search);
+const entryStep = Number(entryParams.get('step'));
+if (entryParams.get('example') === '1' || document.documentElement.dataset.example === 'true') {
+  startExample(Number.isInteger(entryStep) && entryStep >= 0 && entryStep <= 6 ? entryStep : 0);
+  if (entryParams.get('method') === 'group') { discovery.reset('group'); render(); }
+} else if (entryParams.get('guide') === '1') {
   startGuide();
-  const params = new URLSearchParams(location.search), step = Number(params.get('step'));
-  if (step >= 1 && step <= 6) {
-    discovery.reset(params.get('method') === 'group' ? 'group' : 'binary');
-    go(step);
+  if (Number.isInteger(entryStep) && entryStep >= 1 && entryStep <= 6) {
+    discovery.reset(entryParams.get('method') === 'group' ? 'group' : 'binary');
+    go(entryStep);
   }
 } else render();
